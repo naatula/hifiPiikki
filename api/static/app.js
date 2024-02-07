@@ -394,6 +394,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 errorField.innerHTML = ''
                 document.querySelector('.login-panel').classList.remove('active')
                 busy = false
+                updateActiveHosting()
+                fetchTabs()
                 toMain()
             } else {
                 errorField.innerHTML = response.status == 200 ? 'Väärä käyttäjätunnus tai salasana?' : 'Palvelinvirhe?'
