@@ -143,6 +143,7 @@ body {
     padding: 1rem;
     padding-top: 0;
     overflow-y: hidden;
+    flex-grow: 1;
 }
 
 .checkout-panel > main > * {
