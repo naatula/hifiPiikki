@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="/app.webmanifest">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+</head>
+<body>
+    <div id="app">
+        <div class="login-panel">
+            <div class="login-form">
+                <p></p>
+                <input type="text" id="username" name="username" placeholder="Käyttäjätunnus">
+                <input type="password" id="password" name="password" placeholder="Salasana">
+                <div class="button" id="login">Kirjaudu</div>
+            </div>
+        </div>
+        <div class="main-panel">
+            <div class="menu-column">
+                <a href="#" id="hosting-info"></a>
+                <div class="navigation">
+                </div>
+                <div class="quick-payment">
+                    Oma summa
+                </div>
+            </div>
+            <div class="product-column">
+
+            </div>
+        </div>
+        <div class="hosting-panel">
+            <div class="hosting-window">
+                <div class="hosting-details">
+                    <p>Hostaaja: <span id="hosting-name"></span></p>
+                    <p>Aloitusaika: <span id="hosting-started-at"></span></p>
+                    <p>Hostaajan myynti: <span id="hosting-total-host"></span></p>
+                    <p>Myynti yhteensä: <span id="hosting-total-all"></span></p>
+                    <div class="hosting-end-form">
+                        <input type="number" id="hosting-people" placeholder="Hlöä">
+                        <input type="text" id="hosting-comment" placeholder="Mitä tuli tehtyä?">
+                    </div>
+                    <div class="buttons">
+                        <div class="button close">Sulje</div>
+                        <div class="button" id="hosting-end">Lopeta hostaus</div>
+                    </div>
+                </div>
+                <div class="hosting-selection">
+                    <div id="hosting-tab-list" class="tab-list"></div>
+                    <div class="buttons">
+                        <div class="button close">Sulje</div>
+                        <div class="button disabled" id="hosting-confirm">Aloita hostaus</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="checkout-panel">
+            <div class="top-bar">
+                <div class="back">
+                    <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="m313-440 224 224-57 56-320-320 320-320 57 56-224 224h487v80H313Z"/></svg>
+                </div>
+                <h1 id="checkout-title"></h1>
+            </div>
+            <main>
+                <div class="tab-column">
+                    <h2>Piikki</h2>
+                    <div class="tab-list">
+                        <div class="alphabet-container">
+                            <div class="alphabet"></div>
+                            <h3>Viimeisimmät</h3>
+                            <div class="suggestions"></div>
+                        </div>
+                        <h3>Kaikki</h3>
+                        <div class="tabs">
+                        </div>
+                    </div>
+                </div>
+                <div class="checkout-column">
+                    <div class="options">
+                        <div id="checkout-price"></div>
+                        <div id="checkout-quantity">
+                            <h2>Määrä</h2>
+                            <div class="quantity-button" id="decrease">−</div>
+                            <input id="quantity" type="text">
+                            <div class="quantity-button" id="increase">+</div>
+                        </div>
+                    </div>
+                    <div class="description" id="checkout-description">
+                    </div>
+                    <div class="confirmation" id="confirmation">
+                        <div class="summary"></div>
+                        <div class="button">
+                            <div>Lisää piikkiin</div>
+                            <div class="accepted">Hyväksytty</div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+{
+    "name": "hifiPiikki",
+    "display": "standalone",
+    "start_url": "."
+}
