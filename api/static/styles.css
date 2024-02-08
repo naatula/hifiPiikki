@@ -424,12 +424,17 @@ h3 {
     flex-direction: column;
 }
 
+#hosting-tab-list .alphabet-container {
+    min-height: min(80vh, 35rem); /* 100% breaks MobileSafari  */
+}
+
 .alphabet {
     display: grid;
     gap: .5rem;
     grid-template-columns: repeat(10, 1fr);
     margin-bottom: 1rem;
 }
+
 
 .alphabet-container h3 {
     margin-top: auto;
