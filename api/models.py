@@ -38,7 +38,7 @@ class Setting(ParanoidModel):
 
 class Hosting(ParanoidModel):
     tab = models.ForeignKey(Tab, on_delete=models.PROTECT)
-    people = models.IntegerField(null=True)
+    people = models.IntegerField(blank=True, null=True)
     comment = models.TextField(blank=True, default='')
     started_at = models.DateTimeField()
-    ended_at = models.DateTimeField(default=None, null=True)
+    ended_at = models.DateTimeField(default=None, null=True, blank=True)

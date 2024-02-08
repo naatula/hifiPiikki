@@ -60,7 +60,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         # If there is an active hosting, add 6 most sold products to the host within the last 90 days
         hosting = Hosting.objects.filter(ended_at=None).first()
         if hosting is not None:
-            recommendations += list(Purchase.objects.filter(tab=hosting.tab, created_at__gte=datetime.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6])
+            recommendations = list(Purchase.objects.filter(tab=hosting.tab, created_at__gte=datetime.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6]) + recommendations
         # Remove duplicates
         recommendations = list({v['product']:v for v in recommendations}.values())
         # Add the recommendations to the response
