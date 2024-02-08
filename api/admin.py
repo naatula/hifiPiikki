@@ -17,6 +17,13 @@ class ProductAdmin(MyModelAdmin):
     list_display = ('name', 'price_in', 'price_out', 'group', 'in_stock',)
     list_filter = ('group', 'in_stock', 'group__name',)
     search_fields = ('name',)
+    actions = ['set_in_stock', 'set_out_of_stock']
+    @admin.action(description='Set in stock', permissions=['change'],)
+    def set_in_stock(self, request, queryset):
+        queryset.update(in_stock=True)
+    @admin.action(description='Set out of stock', permissions=['change'],)
+    def set_out_of_stock(self, request, queryset):
+        queryset.update(in_stock=False)
 
 class PurchaseAdmin(MyModelAdmin):
     list_display = ('tab', 'product', 'quantity', 'total', 'created_at',)
