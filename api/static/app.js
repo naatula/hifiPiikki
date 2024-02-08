@@ -149,7 +149,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelector('#checkout-title').innerHTML = product.name
         if(product.note || product.description) {
             console.log(product.note, product.description)
-            descriptionElement.innerHTML = `<h2>${product.note}</h2><p>${product.description}</p>`
+            descriptionElement.innerHTML = `<h2>${product.note || ''}</h2><p>${product.description || ''}</p>`
             descriptionElement.style = 'display: block'
         } else {
             descriptionElement.style = 'display: none'
@@ -207,6 +207,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
     const toMain = () => {
+        fetchProducts()
         document.querySelector('.main-panel').classList.add('active')
         document.querySelector('.checkout-panel').classList.remove('active')
         document.querySelectorAll('.product-column .selected, .quick-payment.selected').forEach((x) => x.classList.remove('selected'))
@@ -333,7 +334,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             productsDiv.classList.add('products')
             div.appendChild(productsDiv)
 
-            group.products.forEach(product => {
+            group.products.filter((x) => x.in_stock).sort((a, b) => a.name.localeCompare(b.name)).forEach(product => {
                 const productDiv = document.createElement('div')
                 productDiv.id = `product-${product.id}`
                 const price = product.price_out === product.price_in ? `${product.price_out.replace(".",",")} €` : `${product.price_in.replace(".",",")} € / ${product.price_out.replace(".",",")} €`
@@ -544,8 +545,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.querySelector('#login').addEventListener('click', handleLogin)
 
     enableQuickPayment()
-    if(await fetchProducts()) {
-        await fetchTabs()
+    if(await fetchTabs()) {
         await updateActiveHosting()
         toMain()
     }
