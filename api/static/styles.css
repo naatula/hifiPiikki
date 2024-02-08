@@ -1,7 +1,11 @@
 @font-face {
     font-family: "Open Sans";
     src: url(OpenSans.ttf);
- }
+}
+
+* {
+    -webkit-tap-highlight-color: transparent;
+}
 
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
@@ -98,7 +102,6 @@ body {
     font-family: "Open Sans", Arial, Helvetica, sans-serif;
     height: 100%;
     overflow: hidden;
-    overflow-x: hidden;
 }
 
 #app {
@@ -107,7 +110,7 @@ body {
     margin-left: auto;
     margin-right: auto;
     position: relative;
-    overflow: hidden;
+    overflow-x: hidden;
 }
 
 #app > * {
@@ -129,6 +132,7 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
+    align-items: stretch;
 }
 
 .checkout-panel:not(.active) * {
@@ -148,7 +152,6 @@ body {
 
 .checkout-panel > main > * {
     flex: 1;
-    overflow: hidden;
     overflow-y: auto;
 
 }
@@ -203,7 +206,6 @@ body {
 
 .main-panel > .menu-column {
     flex: 0 0 14rem;
-    overflow: hidden;
     display: flex;
     justify-content: space-between;
     flex-direction: column;
@@ -263,11 +265,6 @@ body {
     white-space: nowrap;
     text-overflow: ellipsis;
     overflow: hidden;
-}
-
-.navigation > a:hover {
-    background-color: var(--grey2);
-    transition: none;
 }
 
 h1 {
@@ -547,6 +544,7 @@ input[type=radio]:checked + label {
     justify-content: flex-start;
     align-items: center;
     white-space: nowrap;
+    margin-left: auto;
     background-color: var(--grey1);
     max-width: 100%;
 }
