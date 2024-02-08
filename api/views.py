@@ -51,6 +51,29 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ProductGroup.objects.all().order_by('order')
     serializer_class = ProductGroupSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def list(self, request):
+        queryset = ProductGroup.objects.all().order_by('order')
+        serializer = ProductGroupSerializer(queryset, many=True)
+        # Recommend 6 of the most sold products within the last 90 days
+        recommendations = list(Purchase.objects.filter(product__isnull=False, created_at__gte=datetime.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6])
+        # If there is an active hosting, add 6 most sold products to the host within the last 90 days
+        hosting = Hosting.objects.filter(ended_at=None).first()
+        if hosting is not None:
+            recommendations += list(Purchase.objects.filter(tab=hosting.tab, created_at__gte=datetime.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6])
+        # Remove duplicates
+        recommendations = list({v['product']:v for v in recommendations}.values())
+        # Add the recommendations to the response
+        recs = []
+        for rec in recommendations:
+            id = rec['product']
+            if id:
+                product = Product.objects.get(id=id)
+                recs.append(ProductSerializer(product).data)
+        data = serializer.data
+        if len(recs) > 0:
+            data = [{'id': None, 'name': 'Suositukset', 'products': recs}] + data
+        return Response(data)
     
     # Change the value of in_stock for a product
     @action(detail=True, methods=['post'])

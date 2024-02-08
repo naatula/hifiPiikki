@@ -476,6 +476,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         })
         closeHostingWindow()
         updateActiveHosting()
+        fetchProducts()
     }
 
     const endHosting = async () => {
@@ -512,6 +513,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             peopleInput.value = ''
             commentInput.value = ''
             updateActiveHosting()
+            fetchProducts()
             closeHostingWindow()
         }
     }
