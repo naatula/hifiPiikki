@@ -7,7 +7,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     var previousQuantity = 1
     var csrftoken = null
 
-    const audio = new Audio('purchase.webm')
+    const audio = new Audio('purchase.m4a')
 
     
     const currency = (n) => {
