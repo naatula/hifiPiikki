@@ -322,6 +322,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelector('.product-column').innerHTML = ''
 
         document.querySelector('.navigation').innerHTML = ''
+        document.querySelector('.navigation').appendChild(document.createElement('div'))
         products.forEach(group => {
             const div = document.createElement('div')
             div.id = `category-${group.id}`
@@ -351,10 +352,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.querySelector('.product-column').appendChild(div)
             const a = document.createElement('a')
             a.href = `#category-${group.id}`
+            a.dataset.id = group.id
             a.innerHTML = group.name
             document.querySelector('.navigation').appendChild(a)
-
         })
+        updateMarker()
         return true
     }
 
@@ -545,6 +547,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     })
 
     document.querySelector('#login').addEventListener('click', handleLogin)
+
+    const updateMarker = (e) => {
+        const pos = document.querySelector('.main-panel .product-column').scrollTop + 100
+        const categoryPositions = Array.from(document.querySelectorAll('.category')).map(category => { return { id: category.id.split('-')[1], position: category.offsetTop } })
+        const category = categoryPositions.filter(x => x.position <= pos)
+        if(category.length > 0) {
+            const result = category.pop().id
+            const marker = document.querySelector('.navigation > div')
+            const active = document.querySelector(`.navigation a[data-id="${result}"]`)
+            marker.style = `top: ${active.offsetTop}px; height: ${active.offsetHeight}px`
+        }
+    }
+
+    document.querySelector('.product-column').addEventListener('scroll', updateMarker)
+    window.addEventListener('resize', updateMarker)
 
     enableQuickPayment()
     if(await fetchTabs()) {
