@@ -63,13 +63,13 @@ input#custom-price {
     --yellow: rgb(225,206,68);
     --red: #ce0000;
 
-    --grey1: rgb(40,42,43);
-    --grey2: rgb(55,58,60);
-    --grey3: rgb(85,90,94);
+    --grey1: rgb(30,32,33);
+    --grey2: rgb(45,48,50);
+    --grey3: rgb(75,80,84);
 
     --lightgrey: rgb(227, 227, 227);
 
-    --background: rgb(22, 22, 22);
+    --background: #101010;
 }
 
 * {
@@ -517,6 +517,7 @@ h3 {
     border-radius: .5rem;
     width: 300px;
     background-color: var(--grey2);
+    white-space: nowrap;
 }
 
 #single-price {
@@ -532,7 +533,7 @@ h3 {
   width: 50%;
   text-align: center;
   text-transform: initial;
-  padding: .5em;
+  padding: .5em 1em;
   transition: background-color 0.2s, color 0.2s;
 }
 .radio-custom:first-of-type {
@@ -813,9 +814,26 @@ input[type=radio]:checked + label {
     .checkout-panel .alphabet {
         grid-template-columns: repeat(6, 1fr);
     }
+
+    #price-choice {
+        width: auto;
+    }
+
+    .radio-custom {
+        width: auto;
+    }
 }
 
-@media screen and (max-width: 849px) {
+@media screen and (max-width: 749px) {
+    /* Make navigation more compact */
+    .navigation > a {
+        padding: 0em 0em 0em 1.5em;
+        max-width: 10rem;
+    }
+    .main-panel > .menu-column {
+        flex: 0 0 auto;
+    }
+
     .alphabet {
         display: flex;
         flex-direction: row;
@@ -824,7 +842,7 @@ input[type=radio]:checked + label {
     }
 
     .alphabet > div {
-        width: 2rem;
+        width: 3rem;
     }
 
     .checkout-panel main {
@@ -832,22 +850,23 @@ input[type=radio]:checked + label {
         overflow-y: auto;
     }
 
-    .main-panel {
-        display: block;
-        overflow-y: auto;
-    }
-
-    .menu-column #hosting-info, .menu-column .quick-payment {
-        max-width: 14rem;
-    }
-
     .tab-column {
         height: 20rem;
         margin-bottom: 1rem;
     }
 
-    #price-choice {
-        white-space: nowrap;
-        width: 16em;
+}
+
+
+@media screen and (max-width: 499px) {
+    .main-panel {
+        display: block;
+        overflow-y: auto;
     }
+
+
+    .menu-column #hosting-info, .menu-column .quick-payment {
+        max-width: 14rem;
+    }
+
 }
