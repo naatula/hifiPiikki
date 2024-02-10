@@ -317,8 +317,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         document.querySelector('.product-column').innerHTML = ''
 
-        document.querySelector('.navigation').innerHTML = ''
-        document.querySelector('.navigation').appendChild(document.createElement('div'))
+        document.querySelector('.navigation').innerHTML = document.querySelector('.navigation').firstElementChild.outerHTML
         products.forEach(group => {
             const div = document.createElement('div')
             div.id = `category-${group.id}`
