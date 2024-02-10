@@ -1,0 +1,4 @@
+Django==4.2.8
+django-paranoid==1.0
+djangorestframework==3.14.0
+gunicorn==21.2.0
