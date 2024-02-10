@@ -46,8 +46,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const getQuantity = () => {
-        const quantity = parseInt(parseFloat(document.querySelector('#quantity').value.replace(',','.')) * 100) / 100
-        if (isNaN(quantity) || quantity <= 0 || quantity >= 100) {
+        const quantity = parseInt(parseFloat(document.querySelector('#quantity').value) * 100) / 100
+        if(isNaN(quantity) || quantity <= 0 || quantity >= 100) {
             return 1
         }
         return quantity
@@ -127,7 +127,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const formatQuantity = async () =>{
         const input = document.querySelector('#quantity')
         const quantity = input.value.replace(',','.')
-        input.value = quantity ? `${parseInt(parseFloat(quantity) * 100) / 100}`.replace('.',',') : previousQuantity
+        input.value = quantity ? `${parseInt(parseFloat(quantity) * 100) / 100}` : previousQuantity
         if(input.value >= 100 || input.value <= 0 || isNaN(input.value.replace(',','.'))) {
             input.value = previousQuantity
         }
