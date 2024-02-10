@@ -46,7 +46,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const getQuantity = () => {
-        const quantity = parseFloat(document.querySelector('#quantity').value.replace(',','.'))
+        const quantity = parseInt(parseFloat(document.querySelector('#quantity').value.replace(',','.')) * 100) / 100
         if (isNaN(quantity) || quantity <= 0 || quantity >= 100) {
             return 1
         }
@@ -96,7 +96,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const updateConfirmation = () => {
-        console.log('udpating')
         if(busy) return
         const quantity = getQuantity()
         var price = getPrice()
@@ -104,7 +103,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         const div = document.querySelector('#confirmation .summary')
         const tab = getTab()
         const button = document.querySelector('#confirmation .button')
-        console.log(price, tab)
         if(price === null || tab === null) {
             div.innerHTML = ``
             button.classList.add('disabled')
@@ -148,7 +146,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         const descriptionElement = document.querySelector('#checkout-description')
         document.querySelector('#checkout-title').innerHTML = product.name
         if(product.note || product.description) {
-            console.log(product.note, product.description)
             descriptionElement.innerHTML = `<h2>${product.note || ''}</h2><p>${product.description || ''}</p>`
             descriptionElement.style = 'display: block'
         } else {
@@ -303,7 +300,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             x.addEventListener('click', (element) => {
                 const matches = Array.from(document.querySelectorAll('#hosting-tab-list .tabs > div')).filter((y) => y.innerHTML[0].toUpperCase() === x.innerHTML)
                 const first = matches[0]
-                console.log(first)
                 if(first) first.scrollIntoView()
                 matches.forEach((y) => blink(y))
             })
@@ -370,7 +366,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if(response.status === 200) {
             const body = await response.text()
             const token = body.split('value="')[1].split('"')[0]
-            console.log(token)
             return token
         }
         return null
@@ -415,7 +410,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         const hosting = await response.json()
         const container = document.querySelector('#hosting-info')
         if(hosting.id !== null) {
-            console.log(hosting)
             container.innerHTML = `${hosting.tab_name}`
             container.classList.add('active')
             container.classList.remove('none')
@@ -488,7 +482,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         const people = parseInt(peopleInput.value)
         const commentInput = document.querySelector('#hosting-comment')
         const comment = commentInput.value
-        console.log(people, comment)
         var errors = false
         if(isNaN(people) || people < 1 || people > 100) {
             peopleInput.classList.add('error')
@@ -534,9 +527,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.querySelector('#confirmation .button').addEventListener('click', confirmPurchase) 
     document.querySelector('.checkout-panel .back').addEventListener('click', handleBackButton)
 
-    document.querySelector('#quantity').addEventListener('change', () => {
-        formatQuantity().then(updateConfirmation)
-    })
+    document.querySelector('#quantity').addEventListener('change', formatQuantity)
+    document.querySelector('#quantity').addEventListener('input', updateConfirmation)
+
 
     document.querySelector('#increase').addEventListener('click', () => {
         changeQuantity(1)
