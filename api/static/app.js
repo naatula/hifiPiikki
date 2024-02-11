@@ -319,6 +319,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         document.querySelector('.navigation').innerHTML = document.querySelector('.navigation').firstElementChild.outerHTML
         products.forEach(group => {
+            if(group.products.filter((x) => x.in_stock).length === 0) return
             const div = document.createElement('div')
             div.id = `category-${group.id}`
             div.classList.add('category')
