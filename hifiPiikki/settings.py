@@ -26,7 +26,12 @@ SECRET_KEY = 'django-insecure-n+v57rh1!uhe@qpk65jm1b&7w@q768*q4^ae_u)s*ue(y3=^h@
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = ["audiopoli.fi", "localhost", "127.0.0.1"]
+CSRF_TRUSTED_ORIGINS = ["https://audiopoli.fi"]
+
+# Settings for running behind a reverse proxy
+USE_X_FORWARDED_HOST = True
+FORCE_SCRIPT_NAME = '/hifiPiikki'
 
 
 # Application definition

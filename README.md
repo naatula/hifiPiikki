@@ -10,3 +10,8 @@ hifiPiikki on verkkosovellus tuotteiden myyntiin kerhoille ja yhdistyksille. Myy
     python manage.py migrate
     python manage.py createsuperuser
     python manage.py runserver
+
+## Suorittaminen
+
+    source venv/bin/activate
+    gunicorn --bind 172.17.0.1:9000 hifiPiikki.wsgi (vaihda 172.17.0.1:9000 tarpeen mukaan)
