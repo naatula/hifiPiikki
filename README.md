@@ -14,4 +14,9 @@ hifiPiikki on verkkosovellus tuotteiden myyntiin kerhoille ja yhdistyksille. Myy
 ## Suorittaminen
 
     source venv/bin/activate
-    gunicorn --bind 172.17.0.1:9000 hifiPiikki.wsgi (vaihda 172.17.0.1:9000 tarpeen mukaan)
+    gunicorn --bind 172.17.0.1:9000 hifiPiikki.wsgi
+Vaihda IP (172.17.0.1:9000) tarpeen mukaan
+
+## Shelly
+
+Shellyn pistorasian saa kytkemään virrat automaattisesti kytkeytymään päälle ja pois täyttämällä Settings-avaimet `shelly_cloud_server`, `shelly_cloud_key` ja `shelly_cloud_device`.
