@@ -7,6 +7,8 @@ from rest_framework.response import Response
 from datetime import datetime, timedelta
 from django.db import models
 from django.shortcuts import render
+from django.utils import timezone
+from .shelly import turn_on_shelly, schedule_turn_off_shelly
 
 
 class PurchaseViewSet(viewsets.GenericViewSet):
@@ -27,7 +29,7 @@ class PurchaseViewSet(viewsets.GenericViewSet):
     def list(self, request):
         return Response(PurchaseSerializer(
             Purchase.objects.filter(
-                created_at__gte=datetime.now()-timedelta(days=1)), many=True).data)
+                created_at__gte=timezone.now()-timedelta(days=1)), many=True).data)
 
 class TabViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Tab.objects.all().order_by('name')
@@ -46,7 +48,7 @@ class TabViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = TabSerializer(tab)
         data = serializer.data
         # Add latest 50 purchases for this tab (max 48 hours old)
-        purchases = Purchase.objects.filter(tab=tab, created_at__gte=datetime.now()-timedelta(hours=48)).order_by('-created_at')[:50]
+        purchases = Purchase.objects.filter(tab=tab, created_at__gte=timezone.now()-timedelta(hours=48)).order_by('-created_at')[:50]
         purchases_data = PurchaseSerializer(purchases, many=True).data
         # Add product name to each purchase
         for i, purchase in enumerate(purchases):
@@ -99,11 +101,11 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         queryset = ProductGroup.objects.all().order_by('order')
         serializer = ProductGroupSerializer(queryset, many=True)
         # Recommend 6 of the most sold products within the last 90 days
-        recommendations = list(Purchase.objects.filter(product__isnull=False, created_at__gte=datetime.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6])
+        recommendations = list(Purchase.objects.filter(product__isnull=False, created_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6])
         # If there is an active hosting, add 6 most sold products to the host within the last 90 days
         hosting = Hosting.objects.filter(ended_at=None).first()
         if hosting is not None:
-            recommendations = list(Purchase.objects.filter(tab=hosting.tab, created_at__gte=datetime.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6]) + recommendations
+            recommendations = list(Purchase.objects.filter(tab=hosting.tab, created_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6]) + recommendations
         # Remove duplicates
         recommendations = list({v['product']:v for v in recommendations}.values())
         # Add the recommendations to the response
@@ -147,11 +149,13 @@ class HostingViewSet(viewsets.GenericViewSet):
             'tab': request.data['tab'],
             'people': None,
             'comment': '',
-            'started_at': datetime.now(),
+            'started_at': timezone.now(),
             'ended_at': None
         })
         if serializer.is_valid():
             serializer.save()
+            # Turn on the Shelly device and cancel any existing timers
+            turn_on_shelly()
             return Response(serializer.data)
         return Response(serializer.errors)
 
@@ -170,10 +174,10 @@ class HostingViewSet(viewsets.GenericViewSet):
             return Response({'error': 'Number of people is required'}, status=400)
         if hosting.comment == None or hosting.comment == '':
             return Response({'error': 'Comment is required'}, status=400)
-        hosting.ended_at = datetime.now()
+        hosting.ended_at = timezone.now()
         hosting.save()
-        # Create a 1 minute timer
-
+        # Schedule the Shelly device to turn off in 1 minute
+        schedule_turn_off_shelly(60)
         return Response(HostingSerializer(hosting).data)
 
     @action(detail=False, methods=['get'])
