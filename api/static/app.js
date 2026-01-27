@@ -648,7 +648,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 purchasesContainer.appendChild(element)
             })
         } else {
-            purchasesContainer.innerHTML = '<div class="no-purchases">Ei ostoksia 2 vrk aikana</div>'
+            purchasesContainer.innerHTML = '<div class="no-purchases">Ei ostoksia viimeisen viikon aikana</div>'
         }
 
         document.querySelector('.statistics-list-view').style = 'display: none;'

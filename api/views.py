@@ -47,8 +47,8 @@ class TabViewSet(viewsets.ReadOnlyModelViewSet):
         tab = self.get_object()
         serializer = TabSerializer(tab)
         data = serializer.data
-        # Add latest 50 purchases for this tab (max 48 hours old)
-        purchases = Purchase.objects.filter(tab=tab, created_at__gte=timezone.now()-timedelta(hours=48)).order_by('-created_at')[:50]
+        # Add latest 50 purchases for this tab (max 7 days old)
+        purchases = Purchase.objects.filter(tab=tab, created_at__gte=timezone.now()-timedelta(days=7)).order_by('-created_at')[:50]
         purchases_data = PurchaseSerializer(purchases, many=True).data
         # Add product name to each purchase
         for i, purchase in enumerate(purchases):
