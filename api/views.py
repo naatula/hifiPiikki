@@ -28,12 +28,54 @@ class PurchaseViewSet(viewsets.GenericViewSet):
         return Response(PurchaseSerializer(
             Purchase.objects.filter(
                 created_at__gte=datetime.now()-timedelta(days=1)), many=True).data)
-    
+
 class TabViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Tab.objects.filter(active=True).order_by('name')
+    queryset = Tab.objects.all().order_by('name')
     serializer_class = TabSerializer
     permission_classes = [permissions.IsAuthenticated]
-    
+
+    def get_queryset(self):
+        """Override queryset to filter by active status for list view only"""
+        if self.action == 'list':
+            return Tab.objects.filter(active=True).order_by('name')
+        return Tab.objects.all().order_by('name')
+
+    def retrieve(self, request, pk=None):
+        """Get tab details with latest purchases"""
+        tab = self.get_object()
+        serializer = TabSerializer(tab)
+        data = serializer.data
+        # Add latest 50 purchases for this tab (max 48 hours old)
+        purchases = Purchase.objects.filter(tab=tab, created_at__gte=datetime.now()-timedelta(hours=48)).order_by('-created_at')[:50]
+        purchases_data = PurchaseSerializer(purchases, many=True).data
+        # Add product name to each purchase
+        for i, purchase in enumerate(purchases):
+            if purchase.product:
+                purchases_data[i]['product_name'] = purchase.product.name
+            else:
+                purchases_data[i]['product_name'] = 'Oma summa'
+        data['purchases'] = purchases_data
+
+        # Add latest reimbursement for this tab
+        latest_reimbursement = tab.reimbursements.order_by('-created_at').first()
+        if latest_reimbursement:
+            data['latest_reimbursement'] = {
+                'sum': str(latest_reimbursement.sum),
+                'description': latest_reimbursement.description,
+                'created_at': latest_reimbursement.created_at.isoformat()
+            }
+        else:
+            data['latest_reimbursement'] = None
+
+        return Response(data)
+
+    @action(detail=False, methods=['get'])
+    def all(self, request):
+        """List all tabs (including inactive ones with nonzero balance) with their balances"""
+        queryset = Tab.objects.filter(models.Q(active=True) | ~models.Q(balance=0)).order_by('name')
+        serializer = TabSerializer(queryset, many=True)
+        return Response(serializer.data)
+
     @action(detail=False, methods=['get'])
     def export(self, request):
         # Only for admins, 403 otherwise
@@ -46,7 +88,8 @@ class TabViewSet(viewsets.ReadOnlyModelViewSet):
         for tab in tabs:
             response.write(f'{tab.id},{tab.name},{tab.balance}\n')
         return response
-    
+
+
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ProductGroup.objects.all().order_by('order')
     serializer_class = ProductGroupSerializer
@@ -74,7 +117,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         if len(recs) > 0:
             data = [{'id': None, 'name': 'Suositukset', 'products': recs}] + data
         return Response(data)
-    
+
     # Change the value of in_stock for a product
     @action(detail=True, methods=['post'])
     def in_stock(self, request, pk=None):
@@ -82,7 +125,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         product.in_stock = request.data['in_stock']
         product.save()
         return Response(ProductSerializer(product).data)
-    
+
 
 class HostingViewSet(viewsets.GenericViewSet):
     queryset = Hosting.objects.all()
@@ -111,8 +154,8 @@ class HostingViewSet(viewsets.GenericViewSet):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors)
-        
-    
+
+
     @action(detail=True, methods=['post'])
     def end(self, request, pk=None):
         hosting = self.get_object()
@@ -132,7 +175,7 @@ class HostingViewSet(viewsets.GenericViewSet):
         # Create a 1 minute timer
 
         return Response(HostingSerializer(hosting).data)
-    
+
     @action(detail=False, methods=['get'])
     def active(self, request):
         queryset = Hosting.objects.filter(ended_at=None).first()
@@ -144,7 +187,7 @@ class HostingViewSet(viewsets.GenericViewSet):
         data['total_host'] = Purchase.objects.filter(tab=queryset.tab, created_at__gte=queryset.started_at).aggregate(models.Sum('total'))['total__sum'] or 0
         data['total_all'] = Purchase.objects.filter(created_at__gte=queryset.started_at).aggregate(models.Sum('total'))['total__sum'] or 0
         return Response(data)
-    
+
 
 @action(detail=False, methods=['get'])
 def csrf(request):

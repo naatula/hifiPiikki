@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", async () => {
-    
+
     var checkoutProduct = null
     var checkoutTab = null
     var activeHost = null
@@ -9,9 +9,47 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const audio = new Audio('purchase.m4a')
 
-    
+
     const currency = (n) => {
         return parseFloat(n).toFixed(2).replace('.',',') + ' €'
+    }
+
+    const humanizeTime = (dateString) => {
+        const now = new Date()
+        const date = new Date(dateString)
+        const diffInSeconds = Math.floor((now - date) / 1000)
+
+        if (diffInSeconds < 60) {
+            return diffInSeconds === 1 ? '1 sekunti sitten' : `${diffInSeconds} sekuntia sitten`
+        }
+
+        const diffInMinutes = Math.floor(diffInSeconds / 60)
+        if (diffInMinutes < 60) {
+            return diffInMinutes === 1 ? '1 minuutti sitten' : `${diffInMinutes} minuuttia sitten`
+        }
+
+        const diffInHours = Math.floor(diffInMinutes / 60)
+        if (diffInHours < 24) {
+            return diffInHours === 1 ? '1 tunti sitten' : `${diffInHours} tuntia sitten`
+        }
+
+        const diffInDays = Math.floor(diffInHours / 24)
+        if (diffInDays < 7) {
+            return diffInDays === 1 ? '1 päivä sitten' : `${diffInDays} päivää sitten`
+        }
+
+        const diffInWeeks = Math.floor(diffInDays / 7)
+        if (diffInWeeks < 4) {
+            return diffInWeeks === 1 ? '1 viikko sitten' : `${diffInWeeks} viikkoa sitten`
+        }
+
+        const diffInMonths = Math.floor(diffInDays / 30)
+        if (diffInMonths < 12) {
+            return diffInMonths === 1 ? '1 kuukausi sitten' : `${diffInMonths} kuukautta sitten`
+        }
+
+        const diffInYears = Math.floor(diffInDays / 365)
+        return diffInYears === 1 ? '1 vuosi sitten' : `${diffInYears} vuotta sitten`
     }
 
     const checkResponse = (response) => {
@@ -69,7 +107,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const tab = getTab()
         if(price === null || quantity === null || isNaN(total) || tab === null) return
         busy = true
-        const request = fetch('/api/purchases/', {
+        const request = fetch('../api/purchases/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -92,7 +130,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             } else {
                 toLogin('Osto epäonnistui. Kirjaudu uudelleen sisään ja yritä uudelleen.')
             }
-        }, 2000)
+        }, 500)
     }
 
     const updateConfirmation = () => {
@@ -151,7 +189,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         } else {
             descriptionElement.style = 'display: none'
         }
-        
+
         document.querySelector('#checkout-quantity').style = ''
         const priceContainer = document.querySelector('#checkout-price')
         if(product.id === null) {
@@ -184,12 +222,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelector('#quantity').value = 1
         previousQuantity = 1
         updateConfirmation()
-
-        setTimeout(async () => {
-            await fetchTabsPromise
-            document.querySelector('.main-panel').classList.remove('active')
-            document.querySelector('.checkout-panel').classList.add('active')
-        }, 100)
+        await fetchTabsPromise
+        document.querySelector('.main-panel').classList.remove('active')
+        document.querySelector('.checkout-panel').classList.add('active')
     }
 
     const enableQuickPayment = () => {
@@ -246,7 +281,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const fetchTabs = async () => {
 
-        const response = await fetch('/api/tabs/')
+        const response = await fetch('../api/tabs/')
         if(!checkResponse(response)) {
             toLogin()
             return false
@@ -308,7 +343,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const fetchProducts = async () => {
-        const response = await fetch('/api/products/')
+        const response = await fetch('../api/products/')
         if(!checkResponse(response)) {
             toLogin()
             return false
@@ -352,17 +387,21 @@ document.addEventListener("DOMContentLoaded", async () => {
             a.innerHTML = group.name
             document.querySelector('.navigation').appendChild(a)
         })
+        // Add footer to product list
+        const footer = document.createElement('footer')
+        footer.textContent = 'hifiPiikki — Simo Naatula — 2026'
+        document.querySelector('.product-column').appendChild(footer)
         updateMarker()
         return true
     }
 
     const getCsrfToken = async () => {
-        // Get token from /api/csrf/ endpoint to use in requests as required by Django
+        // Get token from ../api/csrf/ endpoint to use in requests as required by Django
         // Sort of unsafe, but it's fine for this project
-        const response = await fetch('/api/csrf/', {
+        const response = await fetch('../api/csrf/', {
             method: 'GET'
         })
-        
+
         if(response.status === 200) {
             const body = await response.text()
             const token = body.split('value="')[1].split('"')[0]
@@ -371,7 +410,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         return null
     }
 
-    
+
     const handleLogin = async () => {
         // Log in using Django SessionAuthentication
         const errorField = document.querySelector('.login-panel p')
@@ -381,7 +420,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         formData.append('username', username);
         formData.append('password', password);
 
-        const request = fetch('/api/auth/login/', {
+        const request = fetch('../api/auth/login/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': await getCsrfToken()
@@ -402,7 +441,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const updateActiveHosting = async () => {
-        const response = await fetch('/api/hostings/active/')
+        const response = await fetch('../api/hostings/active/')
         if(!checkResponse(response)) {
             toLogin()
             return false
@@ -415,7 +454,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             container.classList.remove('none')
             activeHost = hosting
         } else {
-            container.innerHTML = 'Aloita hostaus'
+            container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z"/></svg>`
             container.classList.add('none')
             container.classList.remove('active')
             activeHost = null
@@ -436,7 +475,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.querySelector('#hosting-total-host').innerHTML = currency(activeHost.total_host)
             document.querySelector('#hosting-total-all').innerHTML = currency(activeHost.total_all)
 
-            
+
         } else {
             document.querySelector('.hosting-details').style = 'display: none;'
             document.querySelector('.hosting-selection').style = ''
@@ -454,13 +493,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.querySelector('#hosting-confirm').classList.add('disabled')
             document.querySelectorAll('.hosting-end-form input').forEach(input => input.classList.remove('error'));
         }, 200)
-            
+
     }
 
     const confirmHosting = async () => {
         const tab = document.querySelector('#hosting-tab-list .selected')
         if(tab === null) return
-        const response = await fetch('/api/hostings/', {
+        const response = await fetch('../api/hostings/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -493,7 +532,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         if(errors) return
 
-        const response = await fetch(`/api/hostings/${id}/end/`, {
+        const response = await fetch(`../api/hostings/${id}/end/`, {
             method: 'POST',
             headers: {
                 'X-CSRFToken': await getCsrfToken(),
@@ -523,8 +562,124 @@ document.addEventListener("DOMContentLoaded", async () => {
     }))
     document.querySelector('#hosting-info').addEventListener('click', openHostingWindow)
 
+    // Statistics panel functions
+    const openStatisticsWindow = async () => {
+        document.querySelector('.statistics-panel').classList.add('active')
+        document.querySelector('.statistics-panel').classList.add('opening')
+        document.querySelector('.statistics-list-view').style = ''
+        document.querySelector('.statistics-detail-view').style = 'display: none;'
 
-    document.querySelector('#confirmation .button').addEventListener('click', confirmPurchase) 
+        // Fetch all tabs
+        const response = await fetch('../api/tabs/all/')
+        if(!checkResponse(response)) {
+            toLogin()
+            return
+        }
+        const tabs = await response.json()
+
+        const container = document.querySelector('.statistics-tabs')
+        container.innerHTML = ''
+
+        tabs.forEach((tab) => {
+            const element = document.createElement('div')
+            element.dataset.id = tab.id
+            if(!tab.active) element.classList.add('inactive')
+
+            const balanceClass = tab.balance > 0 ? 'positive' : (tab.balance < 0 ? 'negative' : '')
+            element.innerHTML = `
+                <span class="tab-name">${tab.name}</span>
+                <span class="tab-balance ${balanceClass}">${currency(tab.balance)}</span>
+            `
+            element.addEventListener('click', () => {
+                // Add loading highlight
+                document.querySelectorAll('.statistics-tabs > div').forEach(el => el.classList.remove('selected'))
+                element.classList.add('selected')
+                openTabDetail(tab.id)
+            })
+            container.appendChild(element)
+        })
+
+        document.querySelector('.statistics-panel').classList.remove('opening')
+    }
+
+    const openTabDetail = async (tabId) => {
+        const response = await fetch(`../api/tabs/${tabId}/`)
+        if(!checkResponse(response)) {
+            toLogin()
+            return
+        }
+        const tab = await response.json()
+
+        document.querySelector('#statistics-tab-name').innerHTML = tab.name
+        document.querySelector('#statistics-tab-status').innerHTML = tab.active
+        ? '<span class="active-status">Aktiivinen</span>'
+        : '<span class="inactive-status">Ei aktiivinen</span>'
+        document.querySelector('#statistics-tab-balance').innerHTML = currency(tab.balance)
+
+        // Update reimbursement info
+        const reimbursementElement = document.querySelector('#statistics-tab-reimbursement')
+        if(tab.latest_reimbursement) {
+            const reimbursementDate = humanizeTime(tab.latest_reimbursement.created_at)
+            reimbursementElement.innerHTML = `Viimeisin suoritus: ${reimbursementDate}`
+        } else {
+            reimbursementElement.innerHTML = 'Ei suorituksia'
+        }
+
+        const purchasesContainer = document.querySelector('.statistics-purchases')
+        purchasesContainer.innerHTML = ''
+
+        if(tab.purchases && tab.purchases.length > 0) {
+            tab.purchases.forEach((purchase) => {
+                const element = document.createElement('div')
+                const date = new Date(purchase.created_at).toLocaleString('fi-FI', {
+                    day: 'numeric',
+                    month: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: 'numeric'
+                })
+                element.innerHTML = `
+                    <div class="purchase-info">
+                        <span class="purchase-product">${purchase.quantity}x ${purchase.product_name || 'tuote'}</span>
+                        <span class="purchase-date">${date}</span>
+                    </div>
+                    <span class="purchase-total">${currency(purchase.total)}</span>
+                `
+                purchasesContainer.appendChild(element)
+            })
+        } else {
+            purchasesContainer.innerHTML = '<div class="no-purchases">Ei ostoksia 2 vrk aikana</div>'
+        }
+
+        document.querySelector('.statistics-list-view').style = 'display: none;'
+        document.querySelector('.statistics-detail-view').style = ''
+
+        // Remove loading highlight from all tabs
+        document.querySelectorAll('.statistics-tabs > div').forEach(el => el.classList.remove('selected'))
+    }
+
+    const closeStatisticsWindow = () => {
+        document.querySelector('.statistics-panel').classList.add('closing')
+        setTimeout(() => {
+            document.querySelector('.statistics-panel').classList.remove('active')
+            document.querySelector('.statistics-panel').classList.remove('closing')
+        }, 200)
+    }
+
+    const backToStatisticsList = () => {
+        document.querySelector('.statistics-list-view').style = ''
+        document.querySelector('.statistics-detail-view').style = 'display: none;'
+    }
+
+    document.querySelector('#statistics-button').addEventListener('click', openStatisticsWindow)
+    document.querySelectorAll('.statistics-panel .close, .statistics-panel').forEach((x) => x.addEventListener('click', (e) => {
+        if(e.target !== e.currentTarget) return
+        closeStatisticsWindow()
+    }))
+    document.querySelector('.statistics-detail-header .back').addEventListener('click', backToStatisticsList)
+
+
+    document.querySelector('#confirmation .button').addEventListener('click', confirmPurchase)
     document.querySelector('.checkout-panel .back').addEventListener('click', handleBackButton)
 
     document.querySelector('#quantity').addEventListener('change', formatQuantity)

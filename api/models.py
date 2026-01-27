@@ -42,3 +42,11 @@ class Hosting(ParanoidModel):
     comment = models.TextField(blank=True, default='')
     started_at = models.DateTimeField()
     ended_at = models.DateTimeField(default=None, null=True, blank=True)
+
+class Reimbursement(ParanoidModel):
+    tab = models.ForeignKey(Tab, on_delete=models.PROTECT, related_name='reimbursements')
+    sum = models.DecimalField(max_digits=10, decimal_places=2)
+    description = models.TextField(blank=True, default='')
+
+    def __str__(self):
+        return f"{self.tab.name} - {self.sum}"
