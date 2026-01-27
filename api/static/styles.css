@@ -1112,4 +1112,8 @@ footer {
     .navigation .marker {
         display: none;
     }
+
+    .statistics-tabs {
+        grid-template-columns: 1fr;
+    }
 }
