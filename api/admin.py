@@ -183,10 +183,16 @@ class TabAdjustmentAdmin(MyModelAdmin):
         return form
 
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        tab_balances = {t.id: float(t.balance) for t in Tab.objects.all()}
+        extra_context['tab_balances_json'] = json.dumps(tab_balances)
         if object_id is None:
-            extra_context = extra_context or {}
             inactive_tab_ids = list(Tab.objects.filter(active=False).values_list('id', flat=True))
             extra_context['inactive_tab_ids_json'] = json.dumps(inactive_tab_ids)
+            extra_context['existing_sum_json'] = 'null'
+        else:
+            obj = TabAdjustment.objects.get(pk=object_id)
+            extra_context['existing_sum_json'] = str(float(obj.sum))
         return super().changeform_view(request, object_id, form_url, extra_context)
 
     def save_model(self, request, obj, form, change):

@@ -2,10 +2,11 @@
 
 {% block extrahead %}
 {{ block.super }}
-{% if inactive_tab_ids_json %}
 <script>
 (function () {
-    const inactiveTabIds = {{ inactive_tab_ids_json }};
+    const tabBalances = {{ tab_balances_json }};
+    const existingSum = {{ existing_sum_json }};
+    const inactiveTabIds = {{ inactive_tab_ids_json|default:"[]" }};
 
     function updateActivateTabVisibility() {
         const tabSelect = document.getElementById('id_tab');
@@ -22,14 +23,48 @@
         }
     }
 
+    function updateBalancePreview() {
+        const tabSelect = document.getElementById('id_tab');
+        const sumInput = document.getElementById('id_sum');
+        const preview = document.getElementById('balance-preview');
+        if (!tabSelect || !sumInput || !preview) return;
+
+        const tabId = parseInt(tabSelect.value, 10);
+        const newSum = parseFloat(sumInput.value);
+        const currentBalance = tabBalances[tabId];
+
+        if (!tabId || currentBalance === undefined || isNaN(newSum)) {
+            preview.style.display = 'none';
+            return;
+        }
+
+        const delta = existingSum !== null ? (newSum - existingSum) : newSum;
+        const newBalance = currentBalance + delta;
+
+        preview.textContent = 'New balance: ' + newBalance.toFixed(2);
+        preview.style.color = newBalance >= 0 ? 'var(--body-fg)' : '#ba2121';
+        preview.style.display = '';
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         const tabSelect = document.getElementById('id_tab');
+        const sumInput = document.getElementById('id_sum');
+
+        const preview = document.createElement('p');
+        preview.id = 'balance-preview';
+        preview.style.display = 'none';
+        preview.style.marginTop = '4px';
+        preview.style.fontWeight = 'bold';
+        if (sumInput) sumInput.closest('.form-row').appendChild(preview);
+
         if (tabSelect) {
             tabSelect.addEventListener('change', updateActivateTabVisibility);
+            tabSelect.addEventListener('change', updateBalancePreview);
             updateActivateTabVisibility();
         }
+        if (sumInput) sumInput.addEventListener('input', updateBalancePreview);
+        updateBalancePreview();
     });
 })();
 </script>
-{% endif %}
 {% endblock %}
