@@ -1,4 +1,4 @@
-from .models import Tab, ProductGroup, Product, Purchase, Setting, Hosting, Reimbursement
+from .models import Tab, ProductGroup, Product, Purchase, Setting, Session, TabAdjustment
 from rest_framework import serializers
 
 class TabSerializer(serializers.ModelSerializer):
@@ -28,14 +28,14 @@ class SettingSerializer(serializers.ModelSerializer):
         model = Setting
         fields = ['key', 'value']
 
-class HostingSerializer(serializers.ModelSerializer):
+class SessionSerializer(serializers.ModelSerializer):
     tab_name = serializers.CharField(source='tab.name', read_only=True)
     class Meta:
-        model = Hosting
+        model = Session
         fields = ['id', 'tab', 'tab_name', 'people', 'comment', 'started_at', 'ended_at']
 
-class ReimbursementSerializer(serializers.ModelSerializer):
+class TabAdjustmentSerializer(serializers.ModelSerializer):
     tab_name = serializers.CharField(source='tab.name', read_only=True)
     class Meta:
-        model = Reimbursement
+        model = TabAdjustment
         fields = ['id', 'tab', 'tab_name', 'sum', 'description', 'created_at']

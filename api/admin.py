@@ -1,10 +1,12 @@
+import json
+from django import forms
 from django.contrib import admin, messages
 from django.db import transaction
 from django.db.models import Sum
 from django.urls import path
 from decimal import Decimal
 from django_paranoid.admin import ParanoidAdmin
-from .models import Tab, ProductGroup, Product, Purchase, Setting, Hosting, Reimbursement
+from .models import Tab, ProductGroup, Product, Purchase, Setting, Session, TabAdjustment
 from .admin_views import insights_view
 
 class MyModelAdmin(ParanoidAdmin):
@@ -12,7 +14,11 @@ class MyModelAdmin(ParanoidAdmin):
 
 class TabAdmin(MyModelAdmin):
     list_display = ('name', 'balance', 'active',)
+    ordering = ('name',)
     actions = ['validate_tabs', 'activate_tabs', 'deactivate_tabs']
+
+    def get_readonly_fields(self, request, obj=None):
+        return super().get_readonly_fields(request, obj) + ('balance',)
 
     @admin.action(description='Activate selected tabs')
     def activate_tabs(self, request, queryset):
@@ -41,7 +47,7 @@ class TabAdmin(MyModelAdmin):
             )['total'] or Decimal('0.00')
 
             # Calculate total reimbursements (add to balance)
-            reimbursements_total = Reimbursement.objects.filter(tab=tab).aggregate(
+            reimbursements_total = TabAdjustment.objects.filter(tab=tab).aggregate(
                 total=Sum('sum')
             )['total'] or Decimal('0.00')
 
@@ -64,7 +70,7 @@ class TabAdmin(MyModelAdmin):
             for v in violations:
                 violation_details.append(
                     f"Tab '{v['tab']}': Current={v['current_balance']:.2f}, Expected={v['expected_balance']:.2f}, "
-                    f"Difference={v['difference']:.2f}, Purchases={v['purchases_total']:.2f}, Reimbursements={v['reimbursements_total']:.2f}"
+                    f"Difference={v['difference']:.2f}, Purchases={v['purchases_total']:.2f}, TabAdjustments={v['reimbursements_total']:.2f}"
                 )
 
             messages.error(
@@ -87,6 +93,7 @@ class ProductAdmin(MyModelAdmin):
     list_display = ('name', 'price_in', 'price_out', 'group', 'in_stock',)
     list_filter = ('group', 'in_stock', 'group__name',)
     search_fields = ('name',)
+    ordering = ('name',)
     actions = ['set_in_stock', 'set_out_of_stock']
     @admin.action(description='Set in stock', permissions=['change'],)
     def set_in_stock(self, request, queryset):
@@ -101,45 +108,118 @@ class PurchaseAdmin(MyModelAdmin):
     search_fields = ('tab__name', 'product__name',)
     date_hierarchy = 'created_at'
 
+    def get_readonly_fields(self, request, obj=None):
+        return super().get_readonly_fields(request, obj) + ('deletion_note',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def deletion_note(self, obj):
+        return "Note: deleting a purchase automatically adjusts the tab balance by adding back the purchase total."
+    deletion_note.short_description = "Balance adjustment"
+
+    def delete_model(self, request, obj):
+        with transaction.atomic():
+            obj.tab.balance += obj.total
+            obj.tab.save()
+            super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        with transaction.atomic():
+            for obj in queryset:
+                obj.tab.balance += obj.total
+                obj.tab.save()
+            super().delete_queryset(request, queryset)
+
 class SettingAdmin(MyModelAdmin):
     list_display = ('key', 'value',)
     search_fields = ('key',)
 
-class HostingAdmin(MyModelAdmin):
+class SessionAdmin(MyModelAdmin):
     list_display = ('tab', 'started_at', 'ended_at', 'people', 'comment',)
     list_filter = ('tab', 'ended_at',)
     search_fields = ('tab__name',)
     date_hierarchy = 'ended_at'
 
-class ReimbursementAdmin(MyModelAdmin):
+    def has_add_permission(self, request):
+        return False
+
+class TabAdjustmentAdminForm(forms.ModelForm):
+    activate_tab = forms.BooleanField(
+        required=False,
+        label='Activate tab',
+        help_text='This tab is inactive. Check to activate it when saving.',
+        initial=False,
+    )
+
+    class Meta:
+        model = TabAdjustment
+        fields = '__all__'
+
+
+class TabAdjustmentAdmin(MyModelAdmin):
+    form = TabAdjustmentAdminForm
     list_display = ('tab', 'sum', 'description', 'created_at',)
     list_filter = ('tab',)
     search_fields = ('tab__name', 'description',)
     date_hierarchy = 'created_at'
 
+    def get_fields(self, request, obj=None):
+        fields = list(super().get_fields(request, obj))
+        if obj is None and 'activate_tab' not in fields:
+            fields.append('activate_tab')
+        elif obj is not None and 'activate_tab' in fields:
+            fields.remove('activate_tab')
+        return fields
+
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         form.base_fields['sum'].help_text = (
-            "The system automatically updates the tab balance when you create a reimbursement or edit reimbursement sums. The sum is debited to the tab balance. Negative sums can be used to deduct from the balance. Note that deletions of reimbursements do not automatically adjust balances, beware of data inconsistencies!"
+            "The system automatically updates the tab balance when you create, edit, or delete a reimbursement. The sum is credited to the tab balance on creation. Negative sums can be used to deduct from the balance."
         )
         return form
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        if object_id is None:
+            extra_context = extra_context or {}
+            inactive_tab_ids = list(Tab.objects.filter(active=False).values_list('id', flat=True))
+            extra_context['inactive_tab_ids_json'] = json.dumps(inactive_tab_ids)
+        return super().changeform_view(request, object_id, form_url, extra_context)
 
     def save_model(self, request, obj, form, change):
         with transaction.atomic():
             is_new = obj.pk is None
             if is_new:
-                # New reimbursement - add sum to tab balance
                 super().save_model(request, obj, form, change)
                 obj.tab.balance += obj.sum
+                if form.cleaned_data.get('activate_tab') and not obj.tab.active:
+                    obj.tab.active = True
+                    messages.info(request, f"Tab '{obj.tab.name}' has been activated.")
                 obj.tab.save()
             else:
                 # Editing existing reimbursement - adjust the difference
-                old_obj = Reimbursement.objects.get(pk=obj.pk)
+                old_obj = TabAdjustment.objects.get(pk=obj.pk)
                 old_sum = old_obj.sum
                 super().save_model(request, obj, form, change)
                 difference = obj.sum - old_sum
                 obj.tab.balance += difference
                 obj.tab.save()
+
+    def delete_model(self, request, obj):
+        with transaction.atomic():
+            obj.tab.balance -= obj.sum
+            obj.tab.save()
+            super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        with transaction.atomic():
+            for obj in queryset:
+                obj.tab.balance -= obj.sum
+                obj.tab.save()
+            super().delete_queryset(request, queryset)
 
 # Register your models here.
 admin.site.register(Tab, TabAdmin)
@@ -147,8 +227,8 @@ admin.site.register(ProductGroup, ProductGroupAdmin)
 admin.site.register(Product, ProductAdmin)
 admin.site.register(Purchase, PurchaseAdmin)
 admin.site.register(Setting, SettingAdmin)
-admin.site.register(Hosting, HostingAdmin)
-admin.site.register(Reimbursement, ReimbursementAdmin)
+admin.site.register(Session, SessionAdmin)
+admin.site.register(TabAdjustment, TabAdjustmentAdmin)
 
 # Customize admin site titles
 admin.site.site_header = "hifiPiikki administration"

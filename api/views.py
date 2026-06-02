@@ -1,7 +1,7 @@
 from django.http import HttpResponse
-from .models import Purchase, Tab, Product, ProductGroup, Hosting
+from .models import Purchase, Tab, Product, ProductGroup, Session
 from rest_framework import permissions, viewsets, serializers
-from .serializers import PurchaseSerializer, TabSerializer, ProductSerializer, ProductGroupSerializer, HostingSerializer
+from .serializers import PurchaseSerializer, TabSerializer, ProductSerializer, ProductGroupSerializer, SessionSerializer
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from datetime import datetime, timedelta
@@ -103,7 +103,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         # Recommend 6 of the most sold products within the last 90 days
         recommendations = list(Purchase.objects.filter(product__isnull=False, created_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6])
         # If there is an active hosting, add 6 most sold products to the host within the last 90 days
-        hosting = Hosting.objects.filter(ended_at=None).first()
+        hosting = Session.objects.filter(ended_at=None).first()
         if hosting is not None:
             recommendations = list(Purchase.objects.filter(tab=hosting.tab, created_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6]) + recommendations
         # Remove duplicates
@@ -129,23 +129,23 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(ProductSerializer(product).data)
 
 
-class HostingViewSet(viewsets.GenericViewSet):
-    queryset = Hosting.objects.all()
-    serializer_class = HostingSerializer
+class SessionViewSet(viewsets.GenericViewSet):
+    queryset = Session.objects.all()
+    serializer_class = SessionSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def list(self, request):
-        queryset = Hosting.objects.all()
-        serializer = HostingSerializer(queryset, many=True)
+        queryset = Session.objects.all()
+        serializer = SessionSerializer(queryset, many=True)
         return Response(serializer.data)
 
     # Create should create a new hosting with the tab from the request
     def create(self, request):
         # Fail if there is already an active hosting
-        if Hosting.objects.filter(ended_at=None).exists():
-            return Response({'error': 'An active hosting already exists'}, status=400)
+        if Session.objects.filter(ended_at=None).exists():
+            return Response({'error': 'An active session already exists'}, status=400)
         # Create new hosting object with tab from request
-        serializer = HostingSerializer(data = {
+        serializer = SessionSerializer(data = {
             'tab': request.data['tab'],
             'people': None,
             'comment': '',
@@ -169,7 +169,7 @@ class HostingViewSet(viewsets.GenericViewSet):
         hosting.comment = request.data.get('comment')
         # Fail if the hosting has already ended
         if hosting.ended_at is not None:
-            return Response({'error': 'Hosting has already ended'}, status=400)
+            return Response({'error': 'Session has already ended'}, status=400)
         if hosting.people == None or hosting.people == 0:
             return Response({'error': 'Number of people is required'}, status=400)
         if hosting.comment == None or hosting.comment == '':
@@ -178,14 +178,14 @@ class HostingViewSet(viewsets.GenericViewSet):
         hosting.save()
         # Schedule the Shelly device to turn off in 1 minute
         schedule_turn_off_shelly(60)
-        return Response(HostingSerializer(hosting).data)
+        return Response(SessionSerializer(hosting).data)
 
     @action(detail=False, methods=['get'])
     def active(self, request):
-        queryset = Hosting.objects.filter(ended_at=None).first()
+        queryset = Session.objects.filter(ended_at=None).first()
         if queryset is None:
             return Response({'id': None})
-        serializer = HostingSerializer(queryset, many=False)
+        serializer = SessionSerializer(queryset, many=False)
         # Add total purchases after the hosting started
         data = serializer.data
         data['total_host'] = Purchase.objects.filter(tab=queryset.tab, created_at__gte=queryset.started_at).aggregate(models.Sum('total'))['total__sum'] or 0

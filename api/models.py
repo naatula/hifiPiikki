@@ -36,14 +36,14 @@ class Setting(ParanoidModel):
     key = models.CharField(max_length=255, primary_key=True)
     value = models.CharField(max_length=255)
 
-class Hosting(ParanoidModel):
+class Session(ParanoidModel):
     tab = models.ForeignKey(Tab, on_delete=models.PROTECT)
     people = models.IntegerField(blank=True, null=True)
     comment = models.TextField(blank=True, default='')
     started_at = models.DateTimeField()
     ended_at = models.DateTimeField(default=None, null=True, blank=True)
 
-class Reimbursement(ParanoidModel):
+class TabAdjustment(ParanoidModel):
     tab = models.ForeignKey(Tab, on_delete=models.PROTECT, related_name='reimbursements')
     sum = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(blank=True, default='')

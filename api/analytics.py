@@ -37,7 +37,7 @@ from django.db.models.functions import (
 )
 from django.utils import timezone
 
-from api.models import Hosting, Product, Purchase, Reimbursement, Tab
+from api.models import Session, Product, Purchase, TabAdjustment, Tab
 
 DEFAULT_PERIOD = "90d"
 HOME_KPI_DAYS = 30
@@ -80,7 +80,7 @@ def home_kpis():
     revenue = qs.aggregate(s=Sum("total"))["s"] or Decimal("0")
     count = qs.count()
     reimbursements = (
-        Reimbursement.objects.filter(created_at__gte=since).aggregate(s=Sum("sum"))["s"]
+        TabAdjustment.objects.filter(created_at__gte=since).aggregate(s=Sum("sum"))["s"]
         or Decimal("0")
     )
     credit, debt, net = _balances()
@@ -266,7 +266,7 @@ def dashboard_context(request):
     reimb_filter = {"created_at__gte": start}
     if end:
         reimb_filter["created_at__lt"] = end
-    reimb_qs = Reimbursement.objects.filter(**reimb_filter)
+    reimb_qs = TabAdjustment.objects.filter(**reimb_filter)
     reimbursements = reimb_qs.aggregate(s=Sum("sum"))["s"] or Decimal("0")
     in_by_bucket = _bucketed(
         reimb_qs
@@ -277,7 +277,7 @@ def dashboard_context(request):
         "v",
     )
 
-    # ---- Hosting stats (sessions ended within the period) ---------------
+    # ---- Session stats (sessions ended within the period) ---------------
     hosting_filter = {"ended_at__isnull": False, "ended_at__gte": start}
     if end:
         hosting_filter["ended_at__lt"] = end
@@ -300,7 +300,7 @@ def dashboard_context(request):
         output_field=DecimalField(max_digits=12, decimal_places=2),
     )
     hostings = list(
-        Hosting.objects.filter(**hosting_filter).annotate(
+        Session.objects.filter(**hosting_filter).annotate(
             rev=session_revenue,
             dur=ExpressionWrapper(
                 F("ended_at") - F("started_at"), output_field=DurationField()
