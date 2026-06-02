@@ -130,11 +130,19 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Helsinki'
 
 USE_I18N = True
 
 USE_TZ = True
+
+# Disable locale-based format localization so that the 24-hour formats below
+# are always used in the admin (locale formats default to a 12-hour clock).
+USE_L10N = False
+
+DATETIME_FORMAT = 'j N Y, H:i'
+DATE_FORMAT = 'j N Y'
+TIME_FORMAT = 'H:i'
 
 
 # Static files (CSS, JavaScript, Images)
