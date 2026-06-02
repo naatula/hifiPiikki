@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import os
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,14 +25,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-n+v57rh1!uhe@qpk65jm1b&7w@q768*q4^ae_u)s*ue(y3=^h@'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = ["audiopoli.fi", "localhost", "127.0.0.1"]
 CSRF_TRUSTED_ORIGINS = ["https://audiopoli.fi"]
 
 # Settings for running behind a reverse proxy
 USE_X_FORWARDED_HOST = True
-FORCE_SCRIPT_NAME = '/hifiPiikki'
+FORCE_SCRIPT_NAME = os.environ.get('SCRIPT_NAME', '')
 
 
 # Application definition
@@ -140,6 +141,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'api' / 'static']
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

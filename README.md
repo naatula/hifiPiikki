@@ -9,13 +9,27 @@ hifiPiikki on verkkosovellus tuotteiden myyntiin kerhoille ja yhdistyksille. Myy
     pip install -r requirements.txt
     python manage.py migrate
     python manage.py createsuperuser
+
+## Kehitysympäristö
+
+Kopioi `.env.example` tiedostoksi `.env` ja käynnistä Djangon kehityspalvelin:
+
+    cp .env.example .env
+    source venv/bin/activate
     python manage.py runserver
 
-## Suorittaminen
+[Käyttäjänäkymä](http://localhost:8000/static/index.html)
+
+[Hallinta](http://localhost:8000/admin/)
+
+
+
+## Tuotantokäyttö
 
     source venv/bin/activate
-    gunicorn --bind 172.17.0.1:9000 hifiPiikki.wsgi
-Vaihda IP (172.17.0.1:9000) tarpeen mukaan
+    gunicorn --bind 127.0.0.1:9000 hifiPiikki.wsgi
+Vaihda IP (127.0.0.1:9000) tarpeen mukaan
+
 
 ## Shelly
 
