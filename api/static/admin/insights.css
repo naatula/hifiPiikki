@@ -1,0 +1,148 @@
+.insights {
+  margin-bottom: 2rem;
+}
+.insights__title {
+  margin: 0;
+}
+.period-badge {
+  display: inline-block;
+  margin-top: 0.3rem;
+  padding: 0.15rem 0.6rem;
+  background: var(--button-bg, #79aec8);
+  color: var(--button-fg, #fff);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.insights__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+/* Period selector pills */
+.insights__periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.period {
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--hairline-color, #d0d0d0);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  text-decoration: none;
+  color: var(--body-fg, #333);
+  background: var(--button-bg, #fff);
+}
+.period:hover {
+  border-color: var(--button-bg, #79aec8);
+}
+.period--active {
+  background: var(--button-bg, #79aec8);
+  border-color: var(--button-bg, #79aec8);
+  color: var(--button-fg, #fff);
+  font-weight: 600;
+}
+
+/* KPI cards */
+.insights__kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.kpi {
+  background: var(--darkened-bg, #f8f8f8);
+  border: 1px solid var(--hairline-color, #e0e0e0);
+  border-radius: 6px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.kpi__value {
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.kpi__label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+.kpi--good .kpi__value { color: #2e7d12; }
+.kpi--bad .kpi__value { color: #ba2121; }
+
+/* Chart grid */
+.insights__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.card {
+  background: var(--body-bg, #fff);
+  border: 1px solid var(--hairline-color, #e0e0e0);
+  border-radius: 6px;
+  padding: 1rem;
+  min-width: 0;
+}
+.card--wide {
+  grid-column: 1 / -1;
+}
+.card h2 {
+  font-size: 0.95rem;
+  margin: 0 0 0.75rem;
+}
+
+/* Fixed-height wrapper so the responsive canvas can't grow unbounded.
+   The canvas is absolutely positioned to fill it without feeding its own
+   size back into the layout (the cause of infinite vertical growth). */
+.chart-box {
+  position: relative;
+  height: 260px;
+}
+.chart-box--wide {
+  height: 320px;
+}
+.chart-box--tall {
+  height: 520px;
+}
+.chart-box canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Hosting stat block */
+.hosting-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem 1rem;
+}
+.hosting-stats div {
+  display: flex;
+  flex-direction: column;
+}
+.hosting-stats b {
+  font-size: 1.15rem;
+}
+.hosting-stats span {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+/* Narrow viewports: single column (the app targets small screens) */
+@media (max-width: 767px) {
+  .insights__grid {
+    grid-template-columns: 1fr;
+  }
+}
