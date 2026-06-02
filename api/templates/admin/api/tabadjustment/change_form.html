@@ -1,0 +1,35 @@
+{% extends "admin/change_form.html" %}
+
+{% block extrahead %}
+{{ block.super }}
+{% if inactive_tab_ids_json %}
+<script>
+(function () {
+    const inactiveTabIds = {{ inactive_tab_ids_json }};
+
+    function updateActivateTabVisibility() {
+        const tabSelect = document.getElementById('id_tab');
+        const activateTabRow = document.querySelector('.form-row.field-activate_tab');
+        if (!tabSelect || !activateTabRow) return;
+
+        const selectedId = parseInt(tabSelect.value, 10);
+        const isInactive = inactiveTabIds.includes(selectedId);
+        activateTabRow.style.display = isInactive ? '' : 'none';
+
+        if (!isInactive) {
+            const checkbox = document.getElementById('id_activate_tab');
+            if (checkbox) checkbox.checked = false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const tabSelect = document.getElementById('id_tab');
+        if (tabSelect) {
+            tabSelect.addEventListener('change', updateActivateTabVisibility);
+            updateActivateTabVisibility();
+        }
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}
