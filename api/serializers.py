@@ -1,10 +1,16 @@
-from .models import Tab, ProductGroup, Product, Purchase, Setting, Session, TabAdjustment
+from .models import Tab, ProductGroup, Product, Purchase, Setting, Session, TabAdjustment, is_tab_locked
 from rest_framework import serializers
 
 class TabSerializer(serializers.ModelSerializer):
+    pin_locked = serializers.SerializerMethodField()
+
     class Meta:
         model = Tab
-        fields = ['id', 'name', 'balance', 'active', 'updated_at']
+        fields = ['id', 'name', 'balance', 'active', 'updated_at', 'pin_required', 'pin_attempts', 'pin_locked']
+        read_only_fields = ['pin_required', 'pin_attempts']
+
+    def get_pin_locked(self, obj):
+        return is_tab_locked(obj)
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:

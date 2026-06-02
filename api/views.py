@@ -1,5 +1,5 @@
 from django.http import HttpResponse
-from .models import Purchase, Tab, Product, ProductGroup, Session
+from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked
 from rest_framework import permissions, viewsets, serializers
 from .serializers import PurchaseSerializer, TabSerializer, ProductSerializer, ProductGroupSerializer, SessionSerializer
 from rest_framework.decorators import action
@@ -18,9 +18,28 @@ class PurchaseViewSet(viewsets.GenericViewSet):
     def create(self, request):
         serializer = PurchaseSerializer(data=request.data)
         if serializer.is_valid():
+            tab = serializer.validated_data['tab']
+            # PIN protection: verify before creating the purchase
+            if tab.pin_required:
+                threshold = get_pin_lockout_threshold()
+                if is_tab_locked(tab, threshold):
+                    return Response(
+                        {'error': 'locked', 'pin_attempts': tab.pin_attempts, 'pin_locked': True},
+                        status=403,
+                    )
+                pin = request.data.get('pin')
+                if pin != tab.pin:
+                    tab.pin_attempts += 1
+                    tab.save()
+                    return Response(
+                        {'error': 'wrong_pin', 'pin_attempts': tab.pin_attempts,
+                         'pin_locked': is_tab_locked(tab, threshold)},
+                        status=403,
+                    )
+                # Correct PIN: reset the attempt counter
+                tab.pin_attempts = 0
             serializer.save()
             # Update the tab balance
-            tab = serializer.validated_data['tab']
             tab.balance -= serializer.validated_data['total']
             tab.save()
             return Response(serializer.data)

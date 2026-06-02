@@ -7,6 +7,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     var previousQuantity = 1
     var csrftoken = null
 
+    const tabsById = {}
+    var enteredPin = ''
+
     const audio = new Audio('purchase.m4a')
 
 
@@ -99,6 +102,39 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
+    // Reveal the PIN keypad above the confirm button. The button itself
+    // becomes disabled and the "Syötä PIN" overlay (driven by the pin-mode
+    // class) shows until a PIN is entered.
+    const revealPinpad = (tab) => {
+        const confirmation = document.querySelector('#confirmation')
+        if(confirmation.classList.contains('pin-mode')) return
+        renderPinpad(tab)
+        confirmation.classList.add('pin-mode')
+        document.querySelector('#confirmation .button').classList.add('disabled')
+    }
+
+    // Cancel PIN entry: hide the keypad and restore the normal confirm button.
+    const hidePinpad = () => {
+        const confirmation = document.querySelector('#confirmation')
+        confirmation.classList.remove('pin-mode')
+        document.querySelector('#confirmation .button').classList.remove('disabled')
+        enteredPin = ''
+    }
+
+    // Click handler for the confirm button. For PIN-protected tabs the first
+    // press reveals the keypad instead of completing the purchase.
+    const onConfirmClick = () => {
+        if(busy) return
+        const button = document.querySelector('#confirmation .button')
+        if(button.classList.contains('disabled')) return
+        const tab = getTab()
+        if(tab !== null && tab.pin_required) {
+            revealPinpad(tab)
+            return
+        }
+        confirmPurchase()
+    }
+
     const confirmPurchase = async () => {
         if(busy) return
         const quantity = getQuantity()
@@ -133,6 +169,129 @@ document.addEventListener("DOMContentLoaded", async () => {
         }, 500)
     }
 
+    const submitPinPurchase = async (pin) => {
+        if(busy) return
+        const quantity = getQuantity()
+        var price = getPrice()
+        const total = (quantity * price).toFixed(2)
+        const tab = getTab()
+        if(price === null || quantity === null || isNaN(total) || tab === null) return
+        const response = await fetch('../api/purchases/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': await getCsrfToken()
+            },
+            body: JSON.stringify({
+                "tab": tab.id,
+                "quantity": quantity,
+                "total": total,
+                "product": checkoutProduct?.id,
+                "pin": pin
+            })
+        })
+        if(response.status === 200) {
+            busy = true
+            document.querySelector('#confirmation').classList.add('ok')
+            audio.play()
+            setTimeout(() => {
+                toMain()
+            }, 500)
+            return
+        }
+        // 403: wrong pin or locked
+        var body = {}
+        try {
+            body = await response.json()
+        } catch(e) {
+            body = {}
+        }
+        enteredPin = ''
+        document.querySelectorAll('#pinpad .pin-dot').forEach((dot) => dot.classList.remove('filled'))
+        const attempts = body.pin_attempts || 0
+        if(tab.pin_attempts !== undefined) tab.pin_attempts = attempts
+        const attemptsElement = document.querySelector('#pinpad .pin-attempts')
+        if(attemptsElement) {
+            attemptsElement.innerHTML = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
+        }
+        if(body.pin_locked) {
+            if(tab.pin_locked !== undefined) tab.pin_locked = true
+            const lockedElement = document.querySelector('#pinpad .pin-locked')
+            if(lockedElement) lockedElement.classList.add('active')
+            const card = document.querySelector('#pinpad .pin-card')
+            if(card) card.classList.add('locked')
+        }
+    }
+
+    const pinKeyPressed = (key) => {
+        if(busy) return
+        if(key === 'cancel') {
+            hidePinpad()
+            return
+        }
+        const tab = getTab()
+        if(tab === null || tab.pin_locked) return
+        if(key === 'backspace') {
+            enteredPin = enteredPin.slice(0, -1)
+        } else if(enteredPin.length < 6) {
+            enteredPin += key
+        }
+        document.querySelectorAll('#pinpad .pin-dot').forEach((dot, index) => {
+            if(index < enteredPin.length) {
+                dot.classList.add('filled')
+            } else {
+                dot.classList.remove('filled')
+            }
+        })
+        if(enteredPin.length === 6) {
+            submitPinPurchase(enteredPin)
+        }
+    }
+
+    const renderPinpad = (tab) => {
+        var pinpad = document.querySelector('#pinpad')
+        if(!pinpad) {
+            pinpad = document.createElement('div')
+            pinpad.id = 'pinpad'
+            document.querySelector('#confirmation').appendChild(pinpad)
+        }
+        enteredPin = ''
+
+        const attempts = tab.pin_attempts || 0
+        const attemptsText = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
+
+        const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'backspace', '0', 'cancel']
+        const keysHtml = keys.map((key) => {
+            if(key === 'backspace') {
+                return `<button class="pin-key backspace" data-digit="backspace">⌫</button>`
+            }
+            if(key === 'cancel') {
+                return `<button class="pin-key cancel" data-digit="cancel">✕</button>`
+            }
+            return `<button class="pin-key" data-digit="${key}">${key}</button>`
+        }).join('')
+
+        pinpad.innerHTML = `
+            <div class="pin-card${tab.pin_locked ? ' locked' : ''}">
+                <div class="pin-attempts">${attemptsText}</div>
+                <div class="pin-dots">
+                    <div class="pin-dot"></div>
+                    <div class="pin-dot"></div>
+                    <div class="pin-dot"></div>
+                    <div class="pin-dot"></div>
+                    <div class="pin-dot"></div>
+                    <div class="pin-dot"></div>
+                </div>
+                <div class="pin-locked${tab.pin_locked ? ' active' : ''}">Piikki on lukittu liian monen väärän yrityksen vuoksi.</div>
+                <div class="pin-keys">${keysHtml}</div>
+            </div>
+        `
+
+        pinpad.querySelectorAll('.pin-key[data-digit]').forEach((button) => {
+            button.addEventListener('click', () => pinKeyPressed(button.dataset.digit))
+        })
+    }
+
     const updateConfirmation = () => {
         if(busy) return
         const quantity = getQuantity()
@@ -141,6 +300,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const div = document.querySelector('#confirmation .summary')
         const tab = getTab()
         const button = document.querySelector('#confirmation .button')
+        const confirmation = document.querySelector('#confirmation')
         if(price === null || tab === null) {
             div.innerHTML = ``
             button.classList.add('disabled')
@@ -152,6 +312,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             `
             button.classList.remove('disabled')
         }
+
+        // The PIN keypad is only revealed by pressing the confirm button.
+        // Any change to the tab or transaction hides it (and the "Syötä PIN"
+        // overlay) again.
+        confirmation.classList.remove('pin-mode')
+        enteredPin = ''
 
     }
 
@@ -245,6 +411,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelectorAll('.product-column .selected, .quick-payment.selected').forEach((x) => x.classList.remove('selected'))
         setTimeout(() => {
             document.querySelector('#confirmation').classList.remove('ok')
+            document.querySelector('#confirmation').classList.remove('pin-mode')
+            enteredPin = ''
             document.querySelector('.checkout-panel main').scroll(0, 0)
             document.querySelector('.checkout-panel .tab-list').scroll(0, 0)
             document.querySelector('#checkout-price').innerHTML = ''
@@ -269,7 +437,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     const selectTab = (element) => {
         document.querySelectorAll('.checkout-panel .tab-list .tabs > div, .checkout-panel .tab-list .suggestions > div').forEach((x) => x.classList.remove('selected'))
         element.classList.add('selected')
-        checkoutTab = {"id": parseInt(element.dataset.id), "name": element.innerHTML}
+        const id = parseInt(element.dataset.id)
+        const tab = tabsById[id]
+        checkoutTab = {
+            "id": id,
+            "name": element.innerHTML,
+            "pin_required": tab ? !!tab.pin_required : false,
+            "pin_attempts": tab ? (tab.pin_attempts || 0) : 0,
+            "pin_locked": tab ? !!tab.pin_locked : false
+        }
         updateConfirmation()
     }
 
@@ -289,6 +465,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         const tabs = await response.json()
         const alphabetContainer = document.querySelector('.checkout-panel .alphabet')
         const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ"
+
+        Object.keys(tabsById).forEach((key) => delete tabsById[key])
+        tabs.forEach((x) => { tabsById[x.id] = x })
 
         alphabetContainer.innerHTML = ''
         document.querySelector('.checkout-panel .tab-list .tabs').innerHTML = ''
@@ -679,7 +858,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.querySelector('.statistics-detail-header .back').addEventListener('click', backToStatisticsList)
 
 
-    document.querySelector('#confirmation .button').addEventListener('click', confirmPurchase)
+    document.querySelector('#confirmation .button').addEventListener('click', onConfirmClick)
     document.querySelector('.checkout-panel .back').addEventListener('click', handleBackButton)
 
     document.querySelector('#quantity').addEventListener('change', formatQuantity)

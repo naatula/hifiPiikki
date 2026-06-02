@@ -13,12 +13,14 @@ class MyModelAdmin(ParanoidAdmin):
     pass
 
 class TabAdmin(MyModelAdmin):
-    list_display = ('name', 'balance', 'active',)
+    list_display = ('name', 'balance', 'active', 'pin_required', 'pin_attempts',)
+    list_filter = ('pin_required',)
     ordering = ('name',)
-    actions = ['validate_tabs', 'activate_tabs', 'deactivate_tabs']
+    actions = ['validate_tabs', 'activate_tabs', 'deactivate_tabs', 'reset_pin_attempts']
+    fields = ('name', 'balance', 'active', 'pin', 'pin_required', 'pin_attempts',)
 
     def get_readonly_fields(self, request, obj=None):
-        return super().get_readonly_fields(request, obj) + ('balance',)
+        return super().get_readonly_fields(request, obj) + ('balance', 'pin_attempts',)
 
     @admin.action(description='Activate selected tabs')
     def activate_tabs(self, request, queryset):
@@ -29,6 +31,11 @@ class TabAdmin(MyModelAdmin):
     def deactivate_tabs(self, request, queryset):
         updated = queryset.update(active=False)
         messages.success(request, f'Successfully deactivated {updated} tab(s).')
+
+    @admin.action(description='Reset PIN attempts (unlock)')
+    def reset_pin_attempts(self, request, queryset):
+        updated = queryset.update(pin_attempts=0)
+        messages.success(request, f'Reset PIN attempts for {updated} tab(s).')
 
     @admin.action(description='Validate tab balances')
     def validate_tabs(self, request, queryset):

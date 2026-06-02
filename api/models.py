@@ -1,11 +1,47 @@
 from django.db import models
+from django.core.validators import RegexValidator
+from django.core.exceptions import ValidationError
 from django_paranoid.models import ParanoidModel
+
+
+def get_pin_lockout_threshold():
+    """Return the integer pin_lockout_threshold from Setting, or None if
+    unset/empty/non-numeric (which means lockout is disabled)."""
+    setting = Setting.objects.filter(key='pin_lockout_threshold').first()
+    if setting is None or setting.value is None or str(setting.value).strip() == '':
+        return None
+    try:
+        return int(str(setting.value).strip())
+    except (ValueError, TypeError):
+        return None
+
+
+def is_tab_locked(tab, threshold=None):
+    """Return True if the tab is locked out due to too many failed PIN attempts.
+
+    Locked == threshold is not None AND tab.pin_attempts >= threshold.
+    Pass a pre-fetched threshold to avoid re-querying the Setting."""
+    if threshold is None:
+        threshold = get_pin_lockout_threshold()
+    if threshold is None:
+        return False
+    return tab.pin_attempts >= threshold
+
 
 # Create your models here.
 class Tab(ParanoidModel):
     name = models.CharField(max_length=255)
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
     active = models.BooleanField(default=True)
+    pin = models.CharField(max_length=6, blank=True, null=True, validators=[RegexValidator(r'^\d{6}$', 'PIN must be exactly 6 digits')])
+    pin_required = models.BooleanField(default=False)
+    pin_attempts = models.IntegerField(default=0)
+    
+    def clean(self):
+        super().clean()
+        if self.pin_required and not self.pin:
+            raise ValidationError({'pin_required': 'PIN must be set to enable PIN requirement.'})
+
     def __str__(self):
         return self.name
 
