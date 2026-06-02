@@ -10,16 +10,17 @@
 
     function updateActivateTabVisibility() {
         const tabSelect = document.getElementById('id_tab');
-        const activateTabRow = document.querySelector('.form-row.field-activate_tab');
-        if (!tabSelect || !activateTabRow) return;
+        const activateTabCheckbox = document.getElementById('id_activate_tab');
+        if (!tabSelect || !activateTabCheckbox) return;
+        const activateTabRow = activateTabCheckbox.closest('.form-row');
+        if (!activateTabRow) return;
 
         const selectedId = parseInt(tabSelect.value, 10);
         const isInactive = inactiveTabIds.includes(selectedId);
         activateTabRow.style.display = isInactive ? '' : 'none';
 
         if (!isInactive) {
-            const checkbox = document.getElementById('id_activate_tab');
-            if (checkbox) checkbox.checked = false;
+            activateTabCheckbox.checked = false;
         }
     }
 
@@ -55,15 +56,17 @@
         preview.style.display = 'none';
         preview.style.marginTop = '4px';
         preview.style.fontWeight = 'bold';
-        if (sumInput) sumInput.closest('.form-row').appendChild(preview);
+        if (sumInput) sumInput.insertAdjacentElement('afterend', preview);
 
         if (tabSelect) {
             tabSelect.addEventListener('change', updateActivateTabVisibility);
             tabSelect.addEventListener('change', updateBalancePreview);
             updateActivateTabVisibility();
         }
-        if (sumInput) sumInput.addEventListener('input', updateBalancePreview);
-        updateBalancePreview();
+        if (sumInput) {
+            sumInput.addEventListener('input', updateBalancePreview);
+            updateBalancePreview();
+        }
     });
 })();
 </script>
