@@ -273,10 +273,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateConfirmation()
     }
 
-    const selectHostingTab = (element) => {
-        document.querySelectorAll('#hosting-tab-list .tabs > div, #hosting-tab-list .suggestions > div').forEach((x) => x.classList.remove('selected'))
+    const selectSessionTab = (element) => {
+        document.querySelectorAll('#session-tab-list .tabs > div, #session-tab-list .suggestions > div').forEach((x) => x.classList.remove('selected'))
         element.classList.add('selected')
-        document.querySelector('#hosting-confirm').classList.remove('disabled')
+        document.querySelector('#session-confirm').classList.remove('disabled')
     }
 
     const fetchTabs = async () => {
@@ -299,7 +299,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             element.dataset.id = x.id
             element.innerHTML = x.name
             document.querySelector('.checkout-panel .tab-list .tabs').appendChild(element)
-            document.querySelector('#hosting-tab-list').appendChild(element.cloneNode(true))
+            document.querySelector('#session-tab-list').appendChild(element.cloneNode(true))
             element.addEventListener('click', () => selectTab(element))
         })
         // Add most recently used (updated_at) tabs to suggestions
@@ -326,14 +326,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             element.innerHTML = x
             alphabetContainer.appendChild(element)
         })
-        // Clone tab list to hosting window
-        document.querySelector('#hosting-tab-list').innerHTML = document.querySelector('.checkout-panel .tab-list').innerHTML
-        document.querySelectorAll('#hosting-tab-list .suggestions > div, #hosting-tab-list .tabs > div').forEach((x) => {
-            x.addEventListener('click', () => selectHostingTab(x))
+        // Clone tab list to session window
+        document.querySelector('#session-tab-list').innerHTML = document.querySelector('.checkout-panel .tab-list').innerHTML
+        document.querySelectorAll('#session-tab-list .suggestions > div, #session-tab-list .tabs > div').forEach((x) => {
+            x.addEventListener('click', () => selectSessionTab(x))
         })
-        document.querySelectorAll('#hosting-tab-list .alphabet > div').forEach((x) => {
+        document.querySelectorAll('#session-tab-list .alphabet > div').forEach((x) => {
             x.addEventListener('click', (element) => {
-                const matches = Array.from(document.querySelectorAll('#hosting-tab-list .tabs > div')).filter((y) => y.innerHTML[0].toUpperCase() === x.innerHTML)
+                const matches = Array.from(document.querySelectorAll('#session-tab-list .tabs > div')).filter((y) => y.innerHTML[0].toUpperCase() === x.innerHTML)
                 const first = matches[0]
                 if(first) first.scrollIntoView()
                 matches.forEach((y) => blink(y))
@@ -431,7 +431,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 errorField.innerHTML = ''
                 document.querySelector('.login-panel').classList.remove('active')
                 busy = false
-                updateActiveHosting()
+                updateActiveSession()
                 fetchTabs()
                 toMain()
             } else {
@@ -440,19 +440,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         })
     }
 
-    const updateActiveHosting = async () => {
-        const response = await fetch('../api/hostings/active/')
+    const updateActiveSession = async () => {
+        const response = await fetch('../api/sessions/active/')
         if(!checkResponse(response)) {
             toLogin()
             return false
         }
-        const hosting = await response.json()
-        const container = document.querySelector('#hosting-info')
-        if(hosting.id !== null) {
-            container.innerHTML = `${hosting.tab_name}`
+        const session = await response.json()
+        const container = document.querySelector('#session-info')
+        if(session.id !== null) {
+            container.innerHTML = `${session.tab_name}`
             container.classList.add('active')
             container.classList.remove('none')
-            activeHost = hosting
+            activeHost = session
         } else {
             container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z"/></svg>`
             container.classList.add('none')
@@ -462,44 +462,44 @@ document.addEventListener("DOMContentLoaded", async () => {
         return true
     }
 
-    const openHostingWindow = async () => {
-        document.querySelector('.hosting-panel').classList.add('active')
-        document.querySelector('.hosting-panel').classList.add('opening')
-        document.querySelector('#hosting-tab-list').scroll(0, 0)
+    const openSessionWindow = async () => {
+        document.querySelector('.session-panel').classList.add('active')
+        document.querySelector('.session-panel').classList.add('opening')
+        document.querySelector('#session-tab-list').scroll(0, 0)
         if(activeHost !== null) {
-            await updateActiveHosting()
-            document.querySelector('.hosting-details').style = ''
-            document.querySelector('.hosting-selection').style = 'display: none;'
-            document.querySelector('#hosting-name').innerHTML = activeHost.tab_name
-            document.querySelector('#hosting-started-at').innerHTML = new Date(activeHost.started_at).toLocaleString('fi-FI', {weekday: 'short', month: "numeric", day: "numeric", hour: "numeric", minute: "numeric"})
-            document.querySelector('#hosting-total-host').innerHTML = currency(activeHost.total_host)
-            document.querySelector('#hosting-total-all').innerHTML = currency(activeHost.total_all)
+            await updateActiveSession()
+            document.querySelector('.session-details').style = ''
+            document.querySelector('.session-selection').style = 'display: none;'
+            document.querySelector('#session-name').innerHTML = activeHost.tab_name
+            document.querySelector('#session-started-at').innerHTML = new Date(activeHost.started_at).toLocaleString('fi-FI', {weekday: 'short', month: "numeric", day: "numeric", hour: "numeric", minute: "numeric"})
+            document.querySelector('#session-total-host').innerHTML = currency(activeHost.total_host)
+            document.querySelector('#session-total-all').innerHTML = currency(activeHost.total_all)
 
 
         } else {
-            document.querySelector('.hosting-details').style = 'display: none;'
-            document.querySelector('.hosting-selection').style = ''
+            document.querySelector('.session-details').style = 'display: none;'
+            document.querySelector('.session-selection').style = ''
             await fetchTabs()
         }
-        document.querySelector('.hosting-panel').classList.remove('opening')
+        document.querySelector('.session-panel').classList.remove('opening')
     }
 
-    const closeHostingWindow = () => {
-        document.querySelector('.hosting-panel').classList.add('closing')
+    const closeSessionWindow = () => {
+        document.querySelector('.session-panel').classList.add('closing')
         setTimeout(() => {
-            document.querySelector('.hosting-panel').classList.remove('active')
-            document.querySelector('.hosting-panel').classList.remove('closing')
-            document.querySelectorAll('#hosting-tab-list .selected').forEach((x) => x.classList.remove('selected'))
-            document.querySelector('#hosting-confirm').classList.add('disabled')
-            document.querySelectorAll('.hosting-end-form input').forEach(input => input.classList.remove('error'));
+            document.querySelector('.session-panel').classList.remove('active')
+            document.querySelector('.session-panel').classList.remove('closing')
+            document.querySelectorAll('#session-tab-list .selected').forEach((x) => x.classList.remove('selected'))
+            document.querySelector('#session-confirm').classList.add('disabled')
+            document.querySelectorAll('.session-end-form input').forEach(input => input.classList.remove('error'));
         }, 200)
 
     }
 
-    const confirmHosting = async () => {
-        const tab = document.querySelector('#hosting-tab-list .selected')
+    const confirmSession = async () => {
+        const tab = document.querySelector('#session-tab-list .selected')
         if(tab === null) return
-        const response = await fetch('../api/hostings/', {
+        const response = await fetch('../api/sessions/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -509,17 +509,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                 "tab": parseInt(tab.dataset.id)
             })
         })
-        closeHostingWindow()
-        updateActiveHosting()
+        closeSessionWindow()
+        updateActiveSession()
         fetchProducts()
     }
 
-    const endHosting = async () => {
-        document.querySelectorAll('.hosting-end-form input').forEach(input => input.classList.remove('error'));
+    const endSession = async () => {
+        document.querySelectorAll('.session-end-form input').forEach(input => input.classList.remove('error'));
         const id = activeHost.id
-        const peopleInput = document.querySelector('#hosting-people')
+        const peopleInput = document.querySelector('#session-people')
         const people = parseInt(peopleInput.value)
-        const commentInput = document.querySelector('#hosting-comment')
+        const commentInput = document.querySelector('#session-comment')
         const comment = commentInput.value
         var errors = false
         if(isNaN(people) || people < 1 || people > 100) {
@@ -532,7 +532,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         if(errors) return
 
-        const response = await fetch(`../api/hostings/${id}/end/`, {
+        const response = await fetch(`../api/sessions/${id}/end/`, {
             method: 'POST',
             headers: {
                 'X-CSRFToken': await getCsrfToken(),
@@ -546,21 +546,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         if(checkResponse(response)) {
             peopleInput.value = ''
             commentInput.value = ''
-            updateActiveHosting()
+            updateActiveSession()
             fetchProducts()
-            closeHostingWindow()
+            closeSessionWindow()
         }
     }
 
 
-    document.querySelector('#hosting-confirm').addEventListener('click', confirmHosting)
-    document.querySelector('#hosting-end').addEventListener('click', endHosting)
+    document.querySelector('#session-confirm').addEventListener('click', confirmSession)
+    document.querySelector('#session-end').addEventListener('click', endSession)
 
-    document.querySelectorAll('.hosting-panel .close, .hosting-panel').forEach((x) => x.addEventListener('click', (e) => {
+    document.querySelectorAll('.session-panel .close, .session-panel').forEach((x) => x.addEventListener('click', (e) => {
         if(e.target !== e.currentTarget) return
-        closeHostingWindow()
+        closeSessionWindow()
     }))
-    document.querySelector('#hosting-info').addEventListener('click', openHostingWindow)
+    document.querySelector('#session-info').addEventListener('click', openSessionWindow)
 
     // Statistics panel functions
     const openStatisticsWindow = async () => {
@@ -616,13 +616,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         : '<span class="inactive-status">Ei aktiivinen</span>'
         document.querySelector('#statistics-tab-balance').innerHTML = currency(tab.balance)
 
-        // Update reimbursement info
-        const reimbursementElement = document.querySelector('#statistics-tab-reimbursement')
-        if(tab.latest_reimbursement) {
-            const reimbursementDate = humanizeTime(tab.latest_reimbursement.created_at)
-            reimbursementElement.innerHTML = `Viimeisin suoritus: ${reimbursementDate}`
+        // Update tab adjustment info
+        const tabAdjustmentElement = document.querySelector('#statistics-tab-adjustment')
+        if(tab.latest_tab_adjustment) {
+            const tabAdjustmentDate = humanizeTime(tab.latest_tab_adjustment.created_at)
+            tabAdjustmentElement.innerHTML = `Viimeisin suoritus: ${tabAdjustmentDate}`
         } else {
-            reimbursementElement.innerHTML = 'Ei suorituksia'
+            tabAdjustmentElement.innerHTML = 'Ei suorituksia'
         }
 
         const purchasesContainer = document.querySelector('.statistics-purchases')
@@ -713,7 +713,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     enableQuickPayment()
     if(await fetchTabs()) {
-        await updateActiveHosting()
+        await updateActiveSession()
         toMain()
     }
 })

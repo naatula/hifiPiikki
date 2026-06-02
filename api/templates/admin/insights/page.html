@@ -45,8 +45,8 @@
       <span class="kpi__label">Avg purchase</span>
     </div>
     <div class="kpi">
-      <span class="kpi__value">{{ kpis.reimbursements|floatformat:2 }} €</span>
-      <span class="kpi__label">Reimbursements</span>
+      <span class="kpi__value">{{ kpis.tab_adjustments|floatformat:2 }} €</span>
+      <span class="kpi__label">Adjustments</span>
     </div>
     <div class="kpi">
       <span class="kpi__value">{{ kpis.active_tabs }}</span>
@@ -105,16 +105,16 @@
       <div class="chart-box"><canvas id="chartDow"></canvas></div>
     </div>
 
-    {# ---- Hosting stats ---- #}
+    {# ---- Session stats ---- #}
     <div class="card">
-      <h2>Hosting</h2>
-      <div class="hosting-stats">
-        <div><b>{{ hosting.count }}</b><span>sessions</span></div>
-        <div><b>{{ hosting.people }}</b><span>people</span></div>
-        <div><b>{{ hosting.revenue|floatformat:2 }} €</b><span>revenue</span></div>
-        <div><b>{{ hosting.avg_per_session|floatformat:2 }} €</b><span>/ session</span></div>
-        <div><b>{{ hosting.avg_per_person|floatformat:2 }} €</b><span>/ person</span></div>
-        <div><b>{{ hosting.avg_hours|floatformat:1 }} h</b><span>avg duration</span></div>
+      <h2>Session</h2>
+      <div class="session-stats">
+        <div><b>{{ session.count }}</b><span>sessions</span></div>
+        <div><b>{{ session.people }}</b><span>people</span></div>
+        <div><b>{{ session.revenue|floatformat:2 }} €</b><span>revenue</span></div>
+        <div><b>{{ session.avg_per_session|floatformat:2 }} €</b><span>/ session</span></div>
+        <div><b>{{ session.avg_per_person|floatformat:2 }} €</b><span>/ person</span></div>
+        <div><b>{{ session.avg_hours|floatformat:1 }} h</b><span>avg duration</span></div>
       </div>
     </div>
   </div>
@@ -184,7 +184,7 @@
     data: {
       labels: data.cashflow.labels,
       datasets: [
-        {label: "In (reimbursements)", data: data.cashflow.in, backgroundColor: GOOD},
+        {label: "In (adjustments)", data: data.cashflow.in, backgroundColor: GOOD},
         {label: "Out (purchases)", data: data.cashflow.out, backgroundColor: BAD}
       ]
     },

@@ -58,16 +58,16 @@ class TabViewSet(viewsets.ReadOnlyModelViewSet):
                 purchases_data[i]['product_name'] = 'Oma summa'
         data['purchases'] = purchases_data
 
-        # Add latest reimbursement for this tab
-        latest_reimbursement = tab.reimbursements.order_by('-created_at').first()
-        if latest_reimbursement:
-            data['latest_reimbursement'] = {
-                'sum': str(latest_reimbursement.sum),
-                'description': latest_reimbursement.description,
-                'created_at': latest_reimbursement.created_at.isoformat()
+        # Add latest tab adjustment for this tab
+        latest_tab_adjustment = tab.tab_adjustments.order_by('-created_at').first()
+        if latest_tab_adjustment:
+            data['latest_tab_adjustment'] = {
+                'sum': str(latest_tab_adjustment.sum),
+                'description': latest_tab_adjustment.description,
+                'created_at': latest_tab_adjustment.created_at.isoformat()
             }
         else:
-            data['latest_reimbursement'] = None
+            data['latest_tab_adjustment'] = None
 
         return Response(data)
 
@@ -102,10 +102,10 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = ProductGroupSerializer(queryset, many=True)
         # Recommend 6 of the most sold products within the last 90 days
         recommendations = list(Purchase.objects.filter(product__isnull=False, created_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6])
-        # If there is an active hosting, add 6 most sold products to the host within the last 90 days
-        hosting = Session.objects.filter(ended_at=None).first()
-        if hosting is not None:
-            recommendations = list(Purchase.objects.filter(tab=hosting.tab, created_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6]) + recommendations
+        # If there is an active session, add 6 most sold products to the host within the last 90 days
+        session = Session.objects.filter(ended_at=None).first()
+        if session is not None:
+            recommendations = list(Purchase.objects.filter(tab=session.tab, created_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6]) + recommendations
         # Remove duplicates
         recommendations = list({v['product']:v for v in recommendations}.values())
         # Add the recommendations to the response
@@ -139,12 +139,12 @@ class SessionViewSet(viewsets.GenericViewSet):
         serializer = SessionSerializer(queryset, many=True)
         return Response(serializer.data)
 
-    # Create should create a new hosting with the tab from the request
+    # Create should create a new session with the tab from the request
     def create(self, request):
-        # Fail if there is already an active hosting
+        # Fail if there is already an active session
         if Session.objects.filter(ended_at=None).exists():
             return Response({'error': 'An active session already exists'}, status=400)
-        # Create new hosting object with tab from request
+        # Create new session object with tab from request
         serializer = SessionSerializer(data = {
             'tab': request.data['tab'],
             'people': None,
@@ -162,23 +162,23 @@ class SessionViewSet(viewsets.GenericViewSet):
 
     @action(detail=True, methods=['post'])
     def end(self, request, pk=None):
-        hosting = self.get_object()
-        # Add people and comment to the hosting
-        hosting = self.get_object()
-        hosting.people = request.data.get('people')
-        hosting.comment = request.data.get('comment')
-        # Fail if the hosting has already ended
-        if hosting.ended_at is not None:
+        session = self.get_object()
+        # Add people and comment to the session
+        session = self.get_object()
+        session.people = request.data.get('people')
+        session.comment = request.data.get('comment')
+        # Fail if the session has already ended
+        if session.ended_at is not None:
             return Response({'error': 'Session has already ended'}, status=400)
-        if hosting.people == None or hosting.people == 0:
+        if session.people == None or session.people == 0:
             return Response({'error': 'Number of people is required'}, status=400)
-        if hosting.comment == None or hosting.comment == '':
+        if session.comment == None or session.comment == '':
             return Response({'error': 'Comment is required'}, status=400)
-        hosting.ended_at = timezone.now()
-        hosting.save()
+        session.ended_at = timezone.now()
+        session.save()
         # Schedule the Shelly device to turn off in 1 minute
         schedule_turn_off_shelly(60)
-        return Response(SessionSerializer(hosting).data)
+        return Response(SessionSerializer(session).data)
 
     @action(detail=False, methods=['get'])
     def active(self, request):
@@ -186,7 +186,7 @@ class SessionViewSet(viewsets.GenericViewSet):
         if queryset is None:
             return Response({'id': None})
         serializer = SessionSerializer(queryset, many=False)
-        # Add total purchases after the hosting started
+        # Add total purchases after the session started
         data = serializer.data
         data['total_host'] = Purchase.objects.filter(tab=queryset.tab, created_at__gte=queryset.started_at).aggregate(models.Sum('total'))['total__sum'] or 0
         data['total_all'] = Purchase.objects.filter(created_at__gte=queryset.started_at).aggregate(models.Sum('total'))['total__sum'] or 0

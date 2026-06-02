@@ -44,7 +44,7 @@ class Session(ParanoidModel):
     ended_at = models.DateTimeField(default=None, null=True, blank=True)
 
 class TabAdjustment(ParanoidModel):
-    tab = models.ForeignKey(Tab, on_delete=models.PROTECT, related_name='reimbursements')
+    tab = models.ForeignKey(Tab, on_delete=models.PROTECT, related_name='tab_adjustments')
     sum = models.DecimalField(max_digits=10, decimal_places=2)
     description = models.TextField(blank=True, default='')
 

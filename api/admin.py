@@ -46,13 +46,13 @@ class TabAdmin(MyModelAdmin):
                 total=Sum('total')
             )['total'] or Decimal('0.00')
 
-            # Calculate total reimbursements (add to balance)
-            reimbursements_total = TabAdjustment.objects.filter(tab=tab).aggregate(
+            # Calculate total tab adjustments (add to balance)
+            tab_adjustments_total = TabAdjustment.objects.filter(tab=tab).aggregate(
                 total=Sum('sum')
             )['total'] or Decimal('0.00')
 
-            # Expected balance: starting balance (0) + reimbursements - purchases
-            expected_balance = reimbursements_total - purchases_total
+            # Expected balance: starting balance (0) + tab adjustments - purchases
+            expected_balance = tab_adjustments_total - purchases_total
 
             # Check if current balance matches expected balance
             if abs(tab.balance - expected_balance) > Decimal('0.01'):  # Allow for small rounding differences
@@ -62,7 +62,7 @@ class TabAdmin(MyModelAdmin):
                     'expected_balance': expected_balance,
                     'difference': tab.balance - expected_balance,
                     'purchases_total': purchases_total,
-                    'reimbursements_total': reimbursements_total
+                    'tab_adjustments_total': tab_adjustments_total
                 })
 
         if violations:
@@ -70,7 +70,7 @@ class TabAdmin(MyModelAdmin):
             for v in violations:
                 violation_details.append(
                     f"Tab '{v['tab']}': Current={v['current_balance']:.2f}, Expected={v['expected_balance']:.2f}, "
-                    f"Difference={v['difference']:.2f}, Purchases={v['purchases_total']:.2f}, TabAdjustments={v['reimbursements_total']:.2f}"
+                    f"Difference={v['difference']:.2f}, Purchases={v['purchases_total']:.2f}, TabAdjustments={v['tab_adjustments_total']:.2f}"
                 )
 
             messages.error(
@@ -178,7 +178,7 @@ class TabAdjustmentAdmin(MyModelAdmin):
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
         form.base_fields['sum'].help_text = (
-            "The system automatically updates the tab balance when you create, edit, or delete a reimbursement. The sum is credited to the tab balance on creation. Negative sums can be used to deduct from the balance."
+            "The system automatically updates the tab balance when you create, edit, or delete a tab adjustment. The sum is credited to the tab balance on creation. Negative sums can be used to deduct from the balance."
         )
         return form
 
@@ -206,7 +206,7 @@ class TabAdjustmentAdmin(MyModelAdmin):
                     messages.info(request, f"Tab '{obj.tab.name}' has been activated.")
                 obj.tab.save()
             else:
-                # Editing existing reimbursement - adjust the difference
+                # Editing existing tab adjustment - adjust the difference
                 old_obj = TabAdjustment.objects.get(pk=obj.pk)
                 old_sum = old_obj.sum
                 super().save_model(request, obj, form, change)

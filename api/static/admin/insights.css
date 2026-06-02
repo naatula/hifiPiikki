@@ -122,20 +122,20 @@
   height: 100% !important;
 }
 
-/* Hosting stat block */
-.hosting-stats {
+/* Session stat block */
+.session-stats {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.6rem 1rem;
 }
-.hosting-stats div {
+.session-stats div {
   display: flex;
   flex-direction: column;
 }
-.hosting-stats b {
+.session-stats b {
   font-size: 1.15rem;
 }
-.hosting-stats span {
+.session-stats span {
   font-size: 0.75rem;
   opacity: 0.7;
 }

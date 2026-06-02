@@ -5,7 +5,7 @@ Two entry points share the same helpers:
 * :func:`home_kpis` -- a handful of cheap "quick numbers" for the admin home
   page (a fixed recent window plus point-in-time balances).
 * :func:`dashboard_context` -- the full period-driven payload (KPIs, charts,
-  hosting stats, period selector) for the dedicated ``/admin/insights/`` page.
+  session stats, period selector) for the dedicated ``/admin/insights/`` page.
 
 Queries use the default model managers, which (via django-paranoid) already
 exclude soft-deleted rows. Aggregates are ``Decimal`` for display and converted
@@ -79,7 +79,7 @@ def home_kpis():
     qs = Purchase.objects.filter(created_at__gte=since)
     revenue = qs.aggregate(s=Sum("total"))["s"] or Decimal("0")
     count = qs.count()
-    reimbursements = (
+    tab_adjustments = (
         TabAdjustment.objects.filter(created_at__gte=since).aggregate(s=Sum("sum"))["s"]
         or Decimal("0")
     )
@@ -90,7 +90,7 @@ def home_kpis():
         "revenue": revenue,
         "count": count,
         "avg_purchase": (revenue / count) if count else Decimal("0"),
-        "reimbursements": reimbursements,
+        "tab_adjustments": tab_adjustments,
         "active_tabs": Tab.objects.filter(active=True).count(),
         "in_stock": Product.objects.filter(in_stock=True).count(),
         "credit": credit,
@@ -194,18 +194,18 @@ def dashboard_context(request):
     revenue = period_qs.aggregate(s=Sum("total"))["s"] or Decimal("0")
     count = period_qs.count()
     credit, debt, net = _balances()  # point-in-time, period-independent
-    reimb_filter = {"created_at__gte": start}
+    adjustment_filter = {"created_at__gte": start}
     if end:
-        reimb_filter["created_at__lt"] = end
-    reimb_qs = TabAdjustment.objects.filter(**reimb_filter)
-    reimbursements = reimb_qs.aggregate(s=Sum("sum"))["s"] or Decimal("0")
+        adjustment_filter["created_at__lt"] = end
+    adjustment_qs = TabAdjustment.objects.filter(**adjustment_filter)
+    tab_adjustments = adjustment_qs.aggregate(s=Sum("sum"))["s"] or Decimal("0")
 
     kpis = {
         "period_label": label,
         "revenue": revenue,
         "count": count,
         "avg_purchase": (revenue / count) if count else Decimal("0"),
-        "reimbursements": reimbursements,
+        "tab_adjustments": tab_adjustments,
         "active_tabs": Tab.objects.filter(active=True).count(),
         "in_stock": Product.objects.filter(in_stock=True).count(),
         "credit": credit,
@@ -278,12 +278,12 @@ def dashboard_context(request):
     )
 
     # ---- Session stats (sessions ended within the period) ---------------
-    hosting_filter = {"ended_at__isnull": False, "ended_at__gte": start}
+    session_filter = {"ended_at__isnull": False, "ended_at__gte": start}
     if end:
-        hosting_filter["ended_at__lt"] = end
+        session_filter["ended_at__lt"] = end
     # Per-session revenue via a correlated subquery (sum of the host tab's
     # purchases during the session) so the whole panel is a single query
-    # instead of one query per hosting.
+    # instead of one query per session.
     session_revenue = Coalesce(
         Subquery(
             Purchase.objects.filter(
@@ -299,20 +299,20 @@ def dashboard_context(request):
         Value(Decimal("0")),
         output_field=DecimalField(max_digits=12, decimal_places=2),
     )
-    hostings = list(
-        Session.objects.filter(**hosting_filter).annotate(
+    sessions = list(
+        Session.objects.filter(**session_filter).annotate(
             rev=session_revenue,
             dur=ExpressionWrapper(
                 F("ended_at") - F("started_at"), output_field=DurationField()
             ),
         )
     )
-    h_count = len(hostings)
-    total_people = sum(h.people or 0 for h in hostings)
-    total_rev = sum((h.rev for h in hostings), Decimal("0"))
-    total_seconds = sum(h.dur.total_seconds() for h in hostings if h.dur)
+    h_count = len(sessions)
+    total_people = sum(h.people or 0 for h in sessions)
+    total_rev = sum((h.rev for h in sessions), Decimal("0"))
+    total_seconds = sum(h.dur.total_seconds() for h in sessions if h.dur)
 
-    hosting_stats = {
+    session_stats = {
         "count": h_count,
         "people": total_people,
         "revenue": total_rev,
@@ -377,7 +377,7 @@ def dashboard_context(request):
 
     return {
         "kpis": kpis,
-        "hosting": hosting_stats,
+        "session": session_stats,
         "charts": charts,
         "periods": _period_options(now, code),
     }
