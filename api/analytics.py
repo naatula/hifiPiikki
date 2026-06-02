@@ -194,6 +194,11 @@ def dashboard_context(request):
     revenue = period_qs.aggregate(s=Sum("total"))["s"] or Decimal("0")
     count = period_qs.count()
     credit, debt, net = _balances()  # point-in-time, period-independent
+    reimb_filter = {"created_at__gte": start}
+    if end:
+        reimb_filter["created_at__lt"] = end
+    reimb_qs = TabAdjustment.objects.filter(**reimb_filter)
+    reimbursements = reimb_qs.aggregate(s=Sum("sum"))["s"] or Decimal("0")
 
     kpis = {
         "period_label": label,
@@ -263,11 +268,6 @@ def dashboard_context(request):
         bucket,
         "v",
     )
-    reimb_filter = {"created_at__gte": start}
-    if end:
-        reimb_filter["created_at__lt"] = end
-    reimb_qs = TabAdjustment.objects.filter(**reimb_filter)
-    reimbursements = reimb_qs.aggregate(s=Sum("sum"))["s"] or Decimal("0")
     in_by_bucket = _bucketed(
         reimb_qs
         .annotate(b=trunc("created_at"))
