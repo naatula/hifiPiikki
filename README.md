@@ -30,6 +30,14 @@ Kopioi `.env.example` tiedostoksi `.env` ja käynnistä Djangon kehityspalvelin:
     gunicorn --bind 127.0.0.1:9000 hifiPiikki.wsgi
 Vaihda IP (127.0.0.1:9000) tarpeen mukaan
 
+## Käyttö
+
+Sovellusta käytetään käyttäjänäkymän kautta yhteisellä laitteella, kuten tabletilla. Yhteislaitteella on oma käyttäjätunnus (User), jonka kautta voidaan kirjata myynnit ja kerhotilan käyttökirjaukset mille tahansa käyttäjälle (Tab). Tarkoituksena on, että yhteislaitteella ei kirjauduta ulos käyttökertojen välissä, vaan kirjautuminen säilyy evästeessä nopean käytön mahdollistamiseksi.
+
+Ylläpitäjä voi omalla tunnuksellaan hallintanäkymästä tarkastella myyntejä, kerhotilan käyttöä ja hallinnoida tuotteita, käyttäjiä ja tilitietoja. Reimbursements-kohdasta voidaan nostaa tai laskea halutun käyttäjän piikin saldoa.
+
+Järjestelmä on suunniteltu siten, että kaikki tilisaldon muutokset ovat jäljitettävissä tapahtumaan, jolloin pystytään seuraamaan käyttäjien piikkien saldojen historiallisia muutoksia jälkikäteen.
+
 
 ## Shelly
 

@@ -1,0 +1,210 @@
+{% extends "admin/base_site.html" %}
+{% load static i18n %}
+
+{% block title %}Insights | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrastyle %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/insights.css' %}">
+{% endblock %}
+
+{% block extrahead %}{{ block.super }}
+<script src="{% static 'vendor/chart.umd.min.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; Insights
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="insights">
+  <div class="insights__head">
+    <span class="period-badge">{{ kpis.period_label }}</span>
+    <div class="insights__periods">
+      {% for p in periods %}
+        <a class="period{% if p.active %} period--active{% endif %}"
+           href="?period={{ p.code }}">{{ p.label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ---- KPI cards (reflect the selected period) ---- #}
+  <div class="insights__kpis">
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.revenue|floatformat:2 }} €</span>
+      <span class="kpi__label">Revenue</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.count }}</span>
+      <span class="kpi__label">Purchases</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.avg_purchase|floatformat:2 }} €</span>
+      <span class="kpi__label">Avg purchase</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.reimbursements|floatformat:2 }} €</span>
+      <span class="kpi__label">Reimbursements</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.active_tabs }}</span>
+      <span class="kpi__label">Active tabs</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.in_stock }}</span>
+      <span class="kpi__label">Products in stock</span>
+    </div>
+    <div class="kpi kpi--good">
+      <span class="kpi__value">{{ kpis.credit|floatformat:2 }} €</span>
+      <span class="kpi__label">Outstanding credit</span>
+    </div>
+    <div class="kpi kpi--bad">
+      <span class="kpi__value">{{ kpis.debt|floatformat:2 }} €</span>
+      <span class="kpi__label">Outstanding debt</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.net|floatformat:2 }} €</span>
+      <span class="kpi__label">Net balance</span>
+    </div>
+  </div>
+
+  {# ---- Chart cards ---- #}
+  <div class="insights__grid">
+    <div class="card card--wide">
+      <h2>Revenue</h2>
+      <div class="chart-box chart-box--wide"><canvas id="chartDaily"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Top products by quantity</h2>
+      <div class="chart-box chart-box--tall"><canvas id="chartTopQty"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Top products by revenue</h2>
+      <div class="chart-box chart-box--tall"><canvas id="chartTopRev"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Sales by group</h2>
+      <div class="chart-box"><canvas id="chartGroups"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Top spenders</h2>
+      <div class="chart-box"><canvas id="chartSpenders"></canvas></div>
+    </div>
+    <div class="card card--wide">
+      <h2>Money in vs out</h2>
+      <div class="chart-box chart-box--wide"><canvas id="chartCashflow"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Purchases by hour (EET/EEST)</h2>
+      <div class="chart-box"><canvas id="chartHours"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Purchases by weekday (EET/EEST)</h2>
+      <div class="chart-box"><canvas id="chartDow"></canvas></div>
+    </div>
+
+    {# ---- Hosting stats ---- #}
+    <div class="card">
+      <h2>Hosting</h2>
+      <div class="hosting-stats">
+        <div><b>{{ hosting.count }}</b><span>sessions</span></div>
+        <div><b>{{ hosting.people }}</b><span>people</span></div>
+        <div><b>{{ hosting.revenue|floatformat:2 }} €</b><span>revenue</span></div>
+        <div><b>{{ hosting.avg_per_session|floatformat:2 }} €</b><span>/ session</span></div>
+        <div><b>{{ hosting.avg_per_person|floatformat:2 }} €</b><span>/ person</span></div>
+        <div><b>{{ hosting.avg_hours|floatformat:1 }} h</b><span>avg duration</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{ charts|json_script:"insights-data" }}
+<script>
+(function () {
+  if (typeof Chart === "undefined") return;
+  var data = JSON.parse(document.getElementById("insights-data").textContent);
+
+  var ACCENT = "#79aec8";      // django admin blue
+  var ACCENT2 = "#417690";
+  var GOOD = "#70bf2b";
+  var BAD = "#ba2121";
+  var PALETTE = ["#79aec8", "#417690", "#70bf2b", "#efb80b", "#ba2121",
+                 "#9b59b6", "#1abc9c", "#e67e22", "#34495e", "#c0392b"];
+
+  function euro(v) { return v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " €"; }
+
+  function el(id) { return document.getElementById(id); }
+
+  var dailyDatasets = [
+    {label: "Revenue (€)", data: data.daily.revenue, backgroundColor: ACCENT2}
+  ];
+  if (data.daily.prev_revenue) {
+    dailyDatasets.push({label: data.daily.prev_label + " (€)", data: data.daily.prev_revenue,
+      backgroundColor: ACCENT2 + "55"});
+  }
+  new Chart(el("chartDaily"), {
+    type: "bar",
+    data: {labels: data.daily.labels, datasets: dailyDatasets},
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
+      scales: {
+        y: {title: {display: true, text: "€"}}
+      }
+    }
+  });
+
+  function hbar(id, chart, color, money) {
+    new Chart(el(id), {
+      type: "bar",
+      data: {labels: chart.labels, datasets: [{data: chart.values, backgroundColor: color}]},
+      options: {
+        indexAxis: "y", responsive: true, maintainAspectRatio: false,
+        plugins: {legend: {display: false},
+          tooltip: {callbacks: {label: function (c) { return money ? euro(c.parsed.x) : c.parsed.x; }}}}
+      }
+    });
+  }
+  hbar("chartTopQty", data.top_qty, ACCENT, false);
+  hbar("chartTopRev", data.top_rev, ACCENT2, true);
+  hbar("chartSpenders", data.spenders, GOOD, true);
+
+  // Sales by group (doughnut)
+  new Chart(el("chartGroups"), {
+    type: "doughnut",
+    data: {labels: data.groups.labels, datasets: [{data: data.groups.values, backgroundColor: PALETTE}]},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {position: "right"},
+      tooltip: {callbacks: {label: function (c) { return c.label + ": " + euro(c.parsed); }}}}}
+  });
+
+  // Cashflow: in vs out
+  new Chart(el("chartCashflow"), {
+    type: "bar",
+    data: {
+      labels: data.cashflow.labels,
+      datasets: [
+        {label: "In (reimbursements)", data: data.cashflow.in, backgroundColor: GOOD},
+        {label: "Out (purchases)", data: data.cashflow.out, backgroundColor: BAD}
+      ]
+    },
+    options: {responsive: true, maintainAspectRatio: false,
+      scales: {y: {title: {display: true, text: "€"}}}}
+  });
+
+  // Activity by hour
+  new Chart(el("chartHours"), {
+    type: "bar",
+    data: {labels: data.hours.labels, datasets: [{data: data.hours.values, backgroundColor: ACCENT}]},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}}
+  });
+
+  // Activity by weekday
+  new Chart(el("chartDow"), {
+    type: "bar",
+    data: {labels: data.dow.labels, datasets: [{data: data.dow.values, backgroundColor: ACCENT2}]},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}}
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,48 @@
+<div class="insights">
+  <div class="insights__head">
+    <div>
+      <h1 class="insights__title">Insights</h1>
+      <span class="period-badge">{{ kpis.period_label }}</span>
+    </div>
+    <a class="period period--active" href="{% url 'admin:insights' %}">View all charts &rsaquo;</a>
+  </div>
+
+  <div class="insights__kpis">
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.revenue|floatformat:2 }} €</span>
+      <span class="kpi__label">Revenue</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.count }}</span>
+      <span class="kpi__label">Purchases</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.avg_purchase|floatformat:2 }} €</span>
+      <span class="kpi__label">Avg purchase</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.reimbursements|floatformat:2 }} €</span>
+      <span class="kpi__label">Reimbursements</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.active_tabs }}</span>
+      <span class="kpi__label">Active tabs</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.in_stock }}</span>
+      <span class="kpi__label">Products in stock</span>
+    </div>
+    <div class="kpi kpi--good">
+      <span class="kpi__value">{{ kpis.credit|floatformat:2 }} €</span>
+      <span class="kpi__label">Outstanding credit</span>
+    </div>
+    <div class="kpi kpi--bad">
+      <span class="kpi__value">{{ kpis.debt|floatformat:2 }} €</span>
+      <span class="kpi__label">Outstanding debt</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.net|floatformat:2 }} €</span>
+      <span class="kpi__label">Net balance</span>
+    </div>
+  </div>
+</div>

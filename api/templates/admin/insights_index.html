@@ -1,0 +1,11 @@
+{% extends "admin/index.html" %}
+{% load static insights %}
+
+{% block extrastyle %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/insights.css' %}">
+{% endblock %}
+
+{% block content %}
+{% home_kpis %}
+{{ block.super }}
+{% endblock %}

@@ -1,9 +1,11 @@
 from django.contrib import admin, messages
 from django.db import transaction
 from django.db.models import Sum
+from django.urls import path
 from decimal import Decimal
 from django_paranoid.admin import ParanoidAdmin
 from .models import Tab, ProductGroup, Product, Purchase, Setting, Hosting, Reimbursement
+from .admin_views import insights_view
 
 class MyModelAdmin(ParanoidAdmin):
     pass
@@ -151,3 +153,18 @@ admin.site.register(Reimbursement, ReimbursementAdmin)
 # Customize admin site titles
 admin.site.site_header = "hifiPiikki administration"
 admin.site.site_title = "hifiPiikki administration"
+
+# Show the quick KPI numbers above the model list on the admin home.
+admin.site.index_template = "admin/insights_index.html"
+
+# Register the dedicated /admin/insights/ page (full charts) on the default site.
+_original_get_urls = admin.site.get_urls
+
+
+def get_urls():
+    return [
+        path("insights/", admin.site.admin_view(insights_view), name="insights"),
+    ] + _original_get_urls()
+
+
+admin.site.get_urls = get_urls
