@@ -32,7 +32,7 @@ CSRF_TRUSTED_ORIGINS = ["https://audiopoli.fi"]
 
 # Settings for running behind a reverse proxy
 USE_X_FORWARDED_HOST = True
-FORCE_SCRIPT_NAME = os.environ.get('SCRIPT_NAME', '')
+FORCE_SCRIPT_NAME = config('FORCE_SCRIPT_NAME', default='/hifiPiikki')
 
 
 # Application definition
