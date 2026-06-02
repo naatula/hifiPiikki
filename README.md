@@ -27,7 +27,10 @@ Kopioi `.env.example` tiedostoksi `.env` ja käynnistä Djangon kehityspalvelin:
 ## Tuotantokäyttö
 
     source venv/bin/activate
+    python manage.py migrate
+    python manage.py collectstatic --noinput
     gunicorn --bind 127.0.0.1:9000 hifiPiikki.wsgi
+
 Vaihda IP (127.0.0.1:9000) tarpeen mukaan
 
 ## Käyttö

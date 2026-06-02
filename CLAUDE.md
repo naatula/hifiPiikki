@@ -20,6 +20,17 @@ python manage.py runserver
 - Frontend SPA in Django debug mode: `http://localhost:8000/static/index.html` (not the root `/`)
 - Admin panel: `http://localhost:8000/admin/`
 
+## Deploy
+
+After each deploy, run before restarting the app server:
+
+```bash
+python manage.py migrate
+python manage.py collectstatic --noinput
+```
+
+`collectstatic` is required because `static/` is gitignored — skipping it breaks CSS and JS (charts, styling) in production.
+
 ## Environment variables
 
 - `DEBUG` — Django debug mode (default `False`)
