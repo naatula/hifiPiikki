@@ -206,7 +206,12 @@ document.addEventListener("DOMContentLoaded", async () => {
                 busy = false
                 toMain()
             } else {
-                toLogin('Osto epäonnistui. Kirjaudu uudelleen sisään ja yritä uudelleen.')
+                busy = false
+                document.querySelector('#confirmation').classList.remove('ok')
+                const errorEl = document.querySelector('#purchase-error')
+                document.querySelector('#purchase-error .purchase-error-msg').innerHTML = 'Oston kirjaaminen epäonnistui. Lataa sivu uudelleen ja yritä uudestaan.'
+                errorEl.style.display = ''
+                errorEl.classList.add('active')
             }
         }, 500)
     }
@@ -441,6 +446,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         setTimeout(() => {
             document.querySelector('#confirmation').classList.remove('ok')
             document.querySelector('#confirmation').classList.remove('pin-mode')
+            const purchaseError = document.querySelector('#purchase-error')
+            purchaseError.style.display = 'none'
+            purchaseError.classList.remove('active')
             enteredPin = ''
             document.querySelector('.checkout-panel main').scroll(0, 0)
             document.querySelector('.checkout-panel .tab-list').scroll(0, 0)

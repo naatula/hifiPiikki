@@ -726,6 +726,51 @@ input[type=radio]:checked + label {
     transition: background-color .2s, color .2s;
 }
 
+/* ---- Purchase error ---- */
+
+.purchase-error {
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background: rgba(0,0,0,0.2);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    justify-content: center;
+    align-items: center;
+    z-index: 200;
+}
+
+.purchase-error-window {
+    background-color: var(--grey1);
+    border-radius: 1rem;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    max-width: 20rem;
+    text-align: center;
+}
+
+.purchase-error-msg {
+    color: var(--red);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.purchase-error-reload {
+    display: block;
+    padding: 0.75rem 1.5rem;
+    background-color: #fff;
+    color: #000;
+    border-radius: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+}
+
 /* ---- PIN pad ---- */
 
 /* Hidden in normal mode; shown only when #confirmation has .pin-mode */
