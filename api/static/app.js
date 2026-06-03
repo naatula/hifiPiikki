@@ -67,10 +67,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         return true
     }
 
-    // Read a quantity input as a non-negative integer count (0–99).
+    // Read a quantity input as a non-negative decimal count (0.01 precision, 0–99.99).
     const readCount = (input) => {
         if(!input) return 0
-        const value = parseInt(parseFloat(input.value.replace(',', '.')))
+        const value = Math.round(parseFloat(input.value.replace(',', '.')) * 100) / 100
         if(isNaN(value) || value < 0 || value >= 100) return 0
         return value
     }
@@ -112,19 +112,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         return tab
     }
 
-    // Clamp a quantity input to a whole number in 0–99.
+    // Clamp a quantity input to a decimal in 0–99.99 (0.01 precision).
     const normalizeCount = (input) => {
-        let value = parseInt(parseFloat(input.value.replace(',', '.')))
+        let value = Math.round(parseFloat(input.value.replace(',', '.')) * 100) / 100
         if(isNaN(value) || value < 0) value = 0
-        if(value > 99) value = 99
+        if(value > 99.99) value = 99.99
         input.value = value
     }
 
     // Step a quantity input by the given amount (used by the − and + buttons).
     const stepCount = (input, difference) => {
-        let value = parseInt(parseFloat(input.value.replace(',', '.')))
+        let value = Math.round(parseFloat(input.value.replace(',', '.')) * 100) / 100
         if(isNaN(value)) value = 0
-        value = Math.min(99, Math.max(0, value + difference))
+        value = Math.round(Math.min(99.99, Math.max(0, value + difference)) * 100) / 100
         input.value = value
         updateConfirmation()
     }
@@ -404,7 +404,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 ${priceText ? `<span class="row-price">${priceText}</span>` : ''}
             </div>
             <div class="quantity-button decrease">−</div>
-            <input class="quantity-input" id="${id}" type="number" inputmode="numeric" value="${initial}">
+            <input class="quantity-input" id="${id}" type="number" inputmode="decimal" step="0.01" value="${initial}">
             <div class="quantity-button increase">+</div>
         </div>`
 
