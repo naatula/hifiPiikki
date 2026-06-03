@@ -9,6 +9,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     const tabsById = {}
     var enteredPin = ''
 
+    // State for the statistics-panel PIN-required toggle (separate from the
+    // checkout keypad so the two flows never interfere).
+    var statisticsPinTab = null
+    var statisticsEnteredPin = ''
+    var statisticsDesiredPinRequired = false
+
     const audio = new Audio('purchase.m4a')
 
 
@@ -276,20 +282,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    const renderPinpad = (tab) => {
-        var pinpad = document.querySelector('#pinpad')
-        if(!pinpad) {
-            pinpad = document.createElement('div')
-            pinpad.id = 'pinpad'
-            document.querySelector('#confirmation').appendChild(pinpad)
-        }
-        enteredPin = ''
-
-        const attempts = tab.pin_attempts || 0
-        const attemptsText = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
-
+    // The 12 keypad buttons (digits, cancel ✕, backspace ⌫).
+    const pinKeysHtml = () => {
         const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'cancel', '0', 'backspace']
-        const keysHtml = keys.map((key) => {
+        return keys.map((key) => {
             if(key === 'backspace') {
                 return `<button class="pin-key backspace" data-digit="backspace">⌫</button>`
             }
@@ -298,8 +294,15 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
             return `<button class="pin-key" data-digit="${key}">${key}</button>`
         }).join('')
+    }
 
-        pinpad.innerHTML = `
+    // Build a full PIN card (attempt counter, six dots, locked message, keypad)
+    // for the given tab. Shared by the checkout keypad and the statistics
+    // PIN-required toggle. `onKey` is wired to every key button.
+    const renderPinCard = (container, tab, onKey) => {
+        const attempts = tab.pin_attempts || 0
+        const attemptsText = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
+        container.innerHTML = `
             <div class="pin-card${tab.pin_locked ? ' locked' : ''}">
                 <div class="pin-attempts">${attemptsText}</div>
                 <div class="pin-dots">
@@ -311,13 +314,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                     <div class="pin-dot"></div>
                 </div>
                 <div class="pin-locked${tab.pin_locked ? ' active' : ''}">Piikki on lukittu liian monen väärän yrityksen vuoksi.</div>
-                <div class="pin-keys">${keysHtml}</div>
+                <div class="pin-keys">${pinKeysHtml()}</div>
             </div>
         `
-
-        pinpad.querySelectorAll('.pin-key[data-digit]').forEach((button) => {
-            button.addEventListener('click', () => pinKeyPressed(button.dataset.digit))
+        container.querySelectorAll('.pin-key[data-digit]').forEach((button) => {
+            button.addEventListener('click', () => onKey(button.dataset.digit))
         })
+    }
+
+    const renderPinpad = (tab) => {
+        var pinpad = document.querySelector('#pinpad')
+        if(!pinpad) {
+            pinpad = document.createElement('div')
+            pinpad.id = 'pinpad'
+            document.querySelector('#confirmation').appendChild(pinpad)
+        }
+        enteredPin = ''
+        renderPinCard(pinpad, tab, pinKeyPressed)
     }
 
     const updateConfirmation = () => {
@@ -820,6 +833,32 @@ document.addEventListener("DOMContentLoaded", async () => {
             tabAdjustmentElement.innerHTML = 'Ei suorituksia'
         }
 
+        // PIN-required toggle: only shown for tabs that have a PIN set. The
+        // server never sends the PIN itself, just whether one exists.
+        closeStatisticsPinPad()
+        const pinControl = document.querySelector('#statistics-pin-control')
+        if(tab.has_pin) {
+            statisticsPinTab = {
+                id: tab.id,
+                pin_required: !!tab.pin_required,
+                pin_attempts: tab.pin_attempts || 0,
+                pin_locked: !!tab.pin_locked
+            }
+            document.querySelector('#statistics-pin-required').checked = statisticsPinTab.pin_required
+            const note = document.querySelector('#statistics-pin-lockout-note')
+            if(tab.pin_lockout_threshold) {
+                note.innerHTML = `Piikki lukittuu ${tab.pin_lockout_threshold} peräkkäisen väärän yrityksen jälkeen.`
+                note.style.display = ''
+            } else {
+                note.innerHTML = ''
+                note.style.display = 'none'
+            }
+            pinControl.style.display = ''
+        } else {
+            statisticsPinTab = null
+            pinControl.style.display = 'none'
+        }
+
         const purchasesContainer = document.querySelector('.statistics-purchases')
         purchasesContainer.innerHTML = ''
 
@@ -853,7 +892,98 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelectorAll('.statistics-tabs > div').forEach(el => el.classList.remove('selected'))
     }
 
+    // Open the PIN keypad over the statistics window to confirm flipping the
+    // PIN-required setting. `desired` is the value to apply once the PIN checks
+    // out. The toggle itself stays at its current (unchanged) state until then.
+    const openStatisticsPinPad = (desired) => {
+        if(!statisticsPinTab) return
+        statisticsDesiredPinRequired = desired
+        statisticsEnteredPin = ''
+        renderPinCard(document.querySelector('#statistics-pinpad'), statisticsPinTab, statisticsPinKeyPressed)
+        document.querySelector('#statistics-pin-overlay').classList.add('active')
+    }
+
+    const closeStatisticsPinPad = () => {
+        document.querySelector('#statistics-pin-overlay').classList.remove('active')
+        statisticsEnteredPin = ''
+        // Restore the toggle to the tab's actual (unchanged) state.
+        document.querySelector('#statistics-pin-required').checked =
+            statisticsPinTab ? !!statisticsPinTab.pin_required : false
+    }
+
+    const statisticsPinKeyPressed = (key) => {
+        if(key === 'cancel') {
+            closeStatisticsPinPad()
+            return
+        }
+        if(!statisticsPinTab || statisticsPinTab.pin_locked) return
+        if(key === 'backspace') {
+            statisticsEnteredPin = statisticsEnteredPin.slice(0, -1)
+        } else if(statisticsEnteredPin.length < 6) {
+            statisticsEnteredPin += key
+        }
+        document.querySelectorAll('#statistics-pinpad .pin-dot').forEach((dot, index) => {
+            if(index < statisticsEnteredPin.length) {
+                dot.classList.add('filled')
+            } else {
+                dot.classList.remove('filled')
+            }
+        })
+        if(statisticsEnteredPin.length === 6) {
+            submitStatisticsPin(statisticsEnteredPin)
+        }
+    }
+
+    // Send the entered PIN + desired setting to the server. On success the
+    // toggle reflects the new value; otherwise the same wrong-attempt / locked
+    // feedback as the checkout keypad is shown.
+    const submitStatisticsPin = async (pin) => {
+        const tab = statisticsPinTab
+        if(!tab) return
+        const token = await getCsrfToken()
+        const response = await fetch(`../api/tabs/${tab.id}/set_pin_required/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': token
+            },
+            body: JSON.stringify({ pin: pin, pin_required: statisticsDesiredPinRequired })
+        })
+        if(response.status === 200) {
+            const updated = await response.json()
+            tab.pin_required = !!updated.pin_required
+            tab.pin_attempts = updated.pin_attempts || 0
+            tab.pin_locked = !!updated.pin_locked
+            closeStatisticsPinPad()
+            return
+        }
+        // 403: wrong pin or locked
+        var body = {}
+        try {
+            body = await response.json()
+        } catch(e) {
+            body = {}
+        }
+        statisticsEnteredPin = ''
+        document.querySelectorAll('#statistics-pinpad .pin-dot').forEach((dot) => dot.classList.remove('filled'))
+        const attempts = body.pin_attempts || 0
+        tab.pin_attempts = attempts
+        const attemptsElement = document.querySelector('#statistics-pinpad .pin-attempts')
+        if(attemptsElement) {
+            attemptsElement.innerHTML = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
+        }
+        if(body.pin_locked) {
+            tab.pin_locked = true
+            const lockedElement = document.querySelector('#statistics-pinpad .pin-locked')
+            if(lockedElement) lockedElement.classList.add('active')
+            const card = document.querySelector('#statistics-pinpad .pin-card')
+            if(card) card.classList.add('locked')
+        }
+    }
+
     const closeStatisticsWindow = () => {
+        closeStatisticsPinPad()
+        statisticsPinTab = null
         document.querySelector('.statistics-panel').classList.add('closing')
         setTimeout(() => {
             document.querySelector('.statistics-panel').classList.remove('active')
@@ -862,6 +992,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const backToStatisticsList = () => {
+        closeStatisticsPinPad()
+        statisticsPinTab = null
         document.querySelector('.statistics-list-view').style = ''
         document.querySelector('.statistics-detail-view').style = 'display: none;'
     }
@@ -872,6 +1004,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         closeStatisticsWindow()
     }))
     document.querySelector('.statistics-detail-header .back').addEventListener('click', backToStatisticsList)
+
+    // Flipping the toggle doesn't apply immediately: it requires PIN confirmation.
+    // Revert the visual state and open the keypad with the desired value.
+    document.querySelector('#statistics-pin-required').addEventListener('change', (e) => {
+        const desired = e.target.checked
+        e.target.checked = statisticsPinTab ? !!statisticsPinTab.pin_required : false
+        if(!statisticsPinTab) return
+        openStatisticsPinPad(desired)
+    })
+    // Clicking the overlay backdrop (outside the card) cancels PIN entry.
+    document.querySelector('#statistics-pin-overlay').addEventListener('click', (e) => {
+        if(e.target !== e.currentTarget) return
+        closeStatisticsPinPad()
+    })
 
 
     document.querySelector('#confirmation .button').addEventListener('click', onConfirmClick)
@@ -900,4 +1046,3 @@ document.addEventListener("DOMContentLoaded", async () => {
         toMain()
     }
 })
-

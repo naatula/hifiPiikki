@@ -3,14 +3,19 @@ from rest_framework import serializers
 
 class TabSerializer(serializers.ModelSerializer):
     pin_locked = serializers.SerializerMethodField()
+    has_pin = serializers.SerializerMethodField()
 
     class Meta:
         model = Tab
-        fields = ['id', 'name', 'balance', 'active', 'updated_at', 'pin_required', 'pin_attempts', 'pin_locked']
+        fields = ['id', 'name', 'balance', 'active', 'updated_at', 'pin_required', 'pin_attempts', 'pin_locked', 'has_pin']
         read_only_fields = ['pin_required', 'pin_attempts']
 
     def get_pin_locked(self, obj):
         return is_tab_locked(obj)
+
+    # Whether a PIN is set, without ever exposing the PIN itself.
+    def get_has_pin(self, obj):
+        return bool(obj.pin)
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:

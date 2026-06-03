@@ -1029,6 +1029,7 @@ input[type=radio]:checked + label {
     display: flex;
     flex-direction: column;
     transition: opacity .2s;
+    position: relative;
 }
 
 .statistics-window h2 {
@@ -1186,6 +1187,92 @@ input[type=radio]:checked + label {
 
 .statistics-status .inactive-status {
     color: var(--red);
+}
+
+/* ---- PIN-required toggle (statistics detail) ---- */
+
+.pin-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 1rem 0 .25rem;
+    font-size: 1.125rem;
+}
+
+.pin-info-note {
+    font-size: .8rem;
+    color: var(--lightgrey);
+    margin-bottom: .25rem;
+}
+
+.pin-lockout-note {
+    font-size: .8rem;
+    color: var(--lightgrey);
+    margin-bottom: .25rem;
+}
+
+/* iOS-style toggle switch */
+.ios-toggle {
+    position: relative;
+    display: inline-block;
+    width: 51px;
+    height: 31px;
+    flex-shrink: 0;
+}
+
+.ios-toggle input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.ios-toggle-slider {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+    background-color: var(--grey3);
+    border-radius: 31px;
+    transition: background-color .2s;
+}
+
+.ios-toggle-slider::before {
+    content: "";
+    position: absolute;
+    height: 27px;
+    width: 27px;
+    left: 2px;
+    top: 2px;
+    background-color: #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+    transition: transform .2s;
+}
+
+.ios-toggle input:checked + .ios-toggle-slider {
+    background-color: var(--green);
+}
+
+.ios-toggle input:checked + .ios-toggle-slider::before {
+    transform: translateX(20px);
+}
+
+/* Overlay that floats the PIN keypad over the whole statistics window while
+   confirming a toggle change. */
+.statistics-pin-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    background: rgba(0, 0, 0, .5);
+    border-radius: 1rem;
+    justify-content: center;
+    align-items: center;
+}
+
+.statistics-pin-overlay.active {
+    display: flex;
 }
 
 footer {

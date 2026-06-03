@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="app.webmanifest">
-    <script src="app.js?4"></script>
+    <script src="app.js?5"></script>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#101010">
@@ -67,6 +67,9 @@
         </div>
         <div class="statistics-panel">
             <div class="statistics-window">
+                <div class="statistics-pin-overlay" id="statistics-pin-overlay">
+                    <div class="pin-card-host" id="statistics-pinpad"></div>
+                </div>
                 <div class="statistics-list-view">
                     <h2>Kaikki piikit</h2>
                     <div class="statistics-tabs"></div>
@@ -84,6 +87,17 @@
                     <p class="statistics-status"><span id="statistics-tab-status"></span></p>
                     <p>Saldo: <span id="statistics-tab-balance"></span></p>
                     <p id="statistics-tab-adjustment"></p>
+                    <div id="statistics-pin-control" style="display: none;">
+                        <div class="pin-toggle-row">
+                            <span>Vaadi tunnusluku</span>
+                            <label class="ios-toggle">
+                                <input type="checkbox" id="statistics-pin-required">
+                                <span class="ios-toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="pin-info-note">Tunnusluku on sama kuin avainboksiin. Muutokset loungevastaavan kautta.</div>
+                        <div class="pin-lockout-note" id="statistics-pin-lockout-note"></div>
+                    </div>
                     <h3>Viimeisimmät ostokset</h3>
                     <div class="statistics-purchases"></div>
                     <div class="buttons">

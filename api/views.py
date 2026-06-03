@@ -88,7 +88,41 @@ class TabViewSet(viewsets.ReadOnlyModelViewSet):
         else:
             data['latest_tab_adjustment'] = None
 
+        # Expose the lockout threshold (or None) so the SPA can show a note
+        # next to the PIN-required toggle.
+        data['pin_lockout_threshold'] = get_pin_lockout_threshold()
+
         return Response(data)
+
+    @action(detail=True, methods=['post'])
+    def set_pin_required(self, request, pk=None):
+        """Enable/disable the PIN requirement for a tab. Requires the correct
+        PIN; applies the same wrong-attempt and lockout logic as a purchase and
+        never exposes the stored PIN."""
+        tab = self.get_object()
+        # Only meaningful when a PIN is actually set.
+        if not tab.pin:
+            return Response({'error': 'no_pin'}, status=400)
+        threshold = get_pin_lockout_threshold()
+        if is_tab_locked(tab, threshold):
+            return Response(
+                {'error': 'locked', 'pin_attempts': tab.pin_attempts, 'pin_locked': True},
+                status=403,
+            )
+        pin = request.data.get('pin')
+        if pin != tab.pin:
+            tab.pin_attempts += 1
+            tab.save()
+            return Response(
+                {'error': 'wrong_pin', 'pin_attempts': tab.pin_attempts,
+                 'pin_locked': is_tab_locked(tab, threshold)},
+                status=403,
+            )
+        # Correct PIN: reset the attempt counter and apply the new setting.
+        tab.pin_attempts = 0
+        tab.pin_required = bool(request.data.get('pin_required'))
+        tab.save()
+        return Response(TabSerializer(tab).data)
 
     @action(detail=False, methods=['get'])
     def all(self, request):
