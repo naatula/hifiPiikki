@@ -22,6 +22,23 @@ class TabAdmin(MyModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         return super().get_readonly_fields(request, obj) + ('balance', 'pin_attempts',)
 
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('<path:object_id>/reset_pin/', self.admin_site.admin_view(self.reset_pin_view), name='api_tab_reset_pin'),
+        ]
+        return custom_urls + urls
+
+    def reset_pin_view(self, request, object_id):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+        tab = self.get_object(request, object_id)
+        if tab:
+            tab.pin_attempts = 0
+            tab.save()
+            messages.success(request, f'Reset PIN attempts for {tab.name}.')
+        return HttpResponseRedirect(reverse('admin:api_tab_change', args=[object_id]))
+
     @admin.action(description='Activate selected tabs')
     def activate_tabs(self, request, queryset):
         updated = queryset.update(active=True)

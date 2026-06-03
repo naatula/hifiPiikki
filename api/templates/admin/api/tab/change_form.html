@@ -1,0 +1,10 @@
+{% extends "admin/change_form.html" %}
+
+{% block object-tools-items %}
+    {{ block.super }}
+    {% if original %}
+        <li>
+            <a href="{% url 'admin:api_tab_reset_pin' original.pk %}" class="historylink">Reset PIN attempts</a>
+        </li>
+    {% endif %}
+{% endblock %}
