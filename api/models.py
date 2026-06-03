@@ -54,7 +54,7 @@ class ProductGroup(ParanoidModel):
 class Product(ParanoidModel):
     name = models.CharField(max_length=255)
     price_in = models.DecimalField(max_digits=10, decimal_places=2)
-    price_out = models.DecimalField(max_digits=10, decimal_places=2)
+    price_out = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     group = models.ForeignKey(ProductGroup, on_delete=models.SET_NULL, null=True, blank=True, related_name='products')
     note = models.CharField(max_length=255, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
@@ -63,10 +63,19 @@ class Product(ParanoidModel):
         return self.name
 
 class Purchase(ParanoidModel):
+    PRICE_IN = 'in'
+    PRICE_OUT = 'out'
+    PRICE_TYPE_CHOICES = [(PRICE_IN, 'Sisään'), (PRICE_OUT, 'Ulos')]
+
     tab = models.ForeignKey(Tab, on_delete=models.PROTECT)
     product = models.ForeignKey(Product, on_delete=models.PROTECT, null=True)
     quantity = models.DecimalField(max_digits=10, decimal_places=2)
     total = models.DecimalField(max_digits=10, decimal_places=2)
+    # Whether the in (member) or out (guest) price was charged. Empty when the
+    # product has a single price, for custom amounts, or when it can't be told
+    # apart (e.g. backfilled rows whose product price has since changed).
+    price_type = models.CharField(
+        max_length=3, choices=PRICE_TYPE_CHOICES, null=True, blank=True)
 
 class Setting(ParanoidModel):
     key = models.CharField(max_length=255, primary_key=True)
