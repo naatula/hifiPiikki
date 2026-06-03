@@ -18,7 +18,7 @@ class TabAdmin(MyModelAdmin):
     list_display = ('name', 'balance', 'active', 'pin_required', 'pin_attempts',)
     list_filter = ('pin_required',)
     ordering = ('name',)
-    actions = ['validate_tabs', 'activate_tabs', 'deactivate_tabs', 'reset_pin_attempts']
+    actions = ['validate_tabs', 'recalculate_balances', 'activate_tabs', 'deactivate_tabs', 'reset_pin_attempts']
     change_list_template = 'admin/api/tab/change_list.html'
     fields = ('name', 'balance', 'active', 'pin', 'pin_required', 'pin_attempts',)
 
@@ -30,6 +30,7 @@ class TabAdmin(MyModelAdmin):
         custom_urls = [
             path('<path:object_id>/reset_pin/', self.admin_site.admin_view(self.reset_pin_view), name='api_tab_reset_pin'),
             path('<path:object_id>/insights/', self.admin_site.admin_view(self.insights_view), name='api_tab_insights'),
+            path('<path:object_id>/recalculate_balance/', self.admin_site.admin_view(self.recalculate_balance_view), name='api_tab_recalculate_balance'),
             path('negative-balances/', self.admin_site.admin_view(self.negative_balances_view), name='api_tab_negative_balances'),
         ]
         return custom_urls + urls
@@ -47,6 +48,27 @@ class TabAdmin(MyModelAdmin):
             **analytics.tab_dashboard_context(request, tab),
         }
         return render(request, 'admin/api/tab/insights.html', context)
+
+    def recalculate_balance_view(self, request, object_id):
+        from django.http import HttpResponseRedirect
+        from django.urls import reverse
+        tab = self.get_object(request, object_id)
+        if tab:
+            with transaction.atomic():
+                purchases_total = Purchase.objects.filter(tab=tab).aggregate(
+                    total=Sum('total')
+                )['total'] or Decimal('0.00')
+                adjustments_total = TabAdjustment.objects.filter(tab=tab).aggregate(
+                    total=Sum('sum')
+                )['total'] or Decimal('0.00')
+                old_balance = tab.balance
+                tab.balance = adjustments_total - purchases_total
+                tab.save()
+            messages.success(
+                request,
+                f"Recalculated balance for {tab.name}: {old_balance:.2f} → {tab.balance:.2f} €"
+            )
+        return HttpResponseRedirect(reverse('admin:api_tab_change', args=[object_id]))
 
     def reset_pin_view(self, request, object_id):
         from django.http import HttpResponseRedirect
@@ -72,6 +94,24 @@ class TabAdmin(MyModelAdmin):
     def reset_pin_attempts(self, request, queryset):
         updated = queryset.update(pin_attempts=0)
         messages.success(request, f'Reset PIN attempts for {updated} tab(s).')
+
+    @admin.action(description='Recalculate balances from transaction history')
+    def recalculate_balances(self, request, queryset):
+        updated = 0
+        with transaction.atomic():
+            for tab in queryset:
+                purchases_total = Purchase.objects.filter(tab=tab).aggregate(
+                    total=Sum('total')
+                )['total'] or Decimal('0.00')
+                adjustments_total = TabAdjustment.objects.filter(tab=tab).aggregate(
+                    total=Sum('sum')
+                )['total'] or Decimal('0.00')
+                correct_balance = adjustments_total - purchases_total
+                if tab.balance != correct_balance:
+                    tab.balance = correct_balance
+                    tab.save()
+                    updated += 1
+        messages.success(request, f'Recalculated balances for {queryset.count()} tab(s); {updated} updated.')
 
     @admin.action(description='Validate tab balances')
     def validate_tabs(self, request, queryset):
