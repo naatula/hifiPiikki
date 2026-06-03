@@ -2,7 +2,8 @@ import json
 from django import forms
 from django.contrib import admin, messages
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import F, Sum
+from collections import defaultdict
 from django.urls import path
 from decimal import Decimal
 from django_paranoid.admin import ParanoidAdmin
@@ -183,9 +184,11 @@ class PurchaseAdmin(MyModelAdmin):
 
     def delete_queryset(self, request, queryset):
         with transaction.atomic():
+            tab_totals = defaultdict(Decimal)
             for obj in queryset:
-                obj.tab.balance += obj.total
-                obj.tab.save()
+                tab_totals[obj.tab_id] += obj.total
+            for tab_id, total in tab_totals.items():
+                Tab.objects.filter(pk=tab_id).update(balance=F('balance') + total)
             super().delete_queryset(request, queryset)
 
 class SettingAdmin(MyModelAdmin):
@@ -277,9 +280,11 @@ class TabAdjustmentAdmin(MyModelAdmin):
 
     def delete_queryset(self, request, queryset):
         with transaction.atomic():
+            tab_totals = defaultdict(Decimal)
             for obj in queryset:
-                obj.tab.balance -= obj.sum
-                obj.tab.save()
+                tab_totals[obj.tab_id] += obj.sum
+            for tab_id, total in tab_totals.items():
+                Tab.objects.filter(pk=tab_id).update(balance=F('balance') - total)
             super().delete_queryset(request, queryset)
 
 # Register your models here.
