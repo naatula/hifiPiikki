@@ -404,6 +404,20 @@ h3 {
     align-items: center;
     gap: 1rem;
     user-select: none;
+    flex-wrap: wrap;
+    container-type: inline-size;
+}
+
+.row-header {
+    display: flex;
+    align-items: center;
+    flex: 1;
+}
+
+@container (max-width: 340px) {
+    .row-header {
+        flex: 1 0 100%;
+    }
 }
 
 .total-price {

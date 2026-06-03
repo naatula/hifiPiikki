@@ -370,8 +370,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     // (− input +). Used for the single-price "Määrä" row and the in/out rows.
     const quantityRowHtml = (id, label, priceText, initial) => `
         <div class="checkout-quantity">
-            <h2>${label}</h2>
-            ${priceText ? `<span class="row-price">${priceText}</span>` : ''}
+            <div class="row-header">
+                <h2>${label}</h2>
+                ${priceText ? `<span class="row-price">${priceText}</span>` : ''}
+            </div>
             <div class="quantity-button decrease">−</div>
             <input class="quantity-input" id="${id}" type="number" inputmode="numeric" value="${initial}">
             <div class="quantity-button increase">+</div>
