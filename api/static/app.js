@@ -41,7 +41,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         const diffInWeeks = Math.floor(diffInDays / 7)
-        if (diffInWeeks < 4) {
+        if (diffInDays < 30) {
             return diffInWeeks === 1 ? '1 viikko sitten' : `${diffInWeeks} viikkoa sitten`
         }
 
