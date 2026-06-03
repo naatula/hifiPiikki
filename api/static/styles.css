@@ -794,15 +794,15 @@ input[type=radio]:checked + label {
 
 /* In pin-mode the summary + button keep their original row and position.
    The keypad is taken out of flow and floats directly above the pill, so it
-   shifts nothing and adds no visible container around the summary/button. */
-.confirmation.pin-mode {
-    position: relative;
-}
+   shifts nothing and adds no visible container around the summary/button.
 
+   It is fixed (not absolute) so it escapes the overflow clipping of the
+   checkout columns and `main`, and a z-index keeps it above the tab list and
+   page content — it stays below the full-screen purchase-error modal (200).
+   Its left/bottom are anchored to the confirm button from JS. */
 .confirmation.pin-mode #pinpad {
-    position: absolute;
-    bottom: calc(100% + .4rem);
-    right: 0;
+    position: fixed;
+    z-index: 100;
 }
 
 /* The keypad: a flat card in a different background shade, floating just

@@ -146,7 +146,33 @@ document.addEventListener("DOMContentLoaded", async () => {
         renderPinpad(tab)
         confirmation.classList.add('pin-mode')
         document.querySelector('#confirmation .button').classList.add('disabled')
+        positionPinpad()
     }
+
+    // The keypad is position: fixed so it escapes the overflow clipping of the
+    // checkout columns and can overlap any other content. Anchor it just above
+    // the confirm button, aligned to its right edge, and clamp it to the
+    // viewport so it never spills off the left or top.
+    const positionPinpad = () => {
+        const confirmation = document.querySelector('#confirmation')
+        if(!confirmation.classList.contains('pin-mode')) return
+        const pinpad = document.querySelector('#pinpad')
+        const card = pinpad && pinpad.querySelector('.pin-card')
+        const button = document.querySelector('#confirmation .button')
+        if(!card || !button) return
+        const gap = 8
+        const margin = 8
+        const buttonRect = button.getBoundingClientRect()
+        const cardRect = card.getBoundingClientRect()
+        let left = buttonRect.right - cardRect.width
+        let top = buttonRect.top - gap - cardRect.height
+        left = Math.max(margin, Math.min(left, window.innerWidth - cardRect.width - margin))
+        top = Math.max(margin, top)
+        pinpad.style.left = `${left}px`
+        pinpad.style.top = `${top}px`
+    }
+
+    window.addEventListener('resize', positionPinpad)
 
     // Cancel PIN entry: hide the keypad and restore the normal confirm button.
     const hidePinpad = () => {
@@ -260,6 +286,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             const card = document.querySelector('#pinpad .pin-card')
             if(card) card.classList.add('locked')
         }
+        // The attempts / locked message changes the card height; re-anchor it
+        // above the confirm button so it stays put.
+        positionPinpad()
     }
 
     const pinKeyPressed = (key) => {
