@@ -12,6 +12,7 @@ exclude soft-deleted rows. Aggregates are ``Decimal`` for display and converted
 to ``float``/``int`` for the JSON passed to Chart.js.
 """
 
+from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -39,7 +40,7 @@ from django.utils import timezone
 
 from api.models import Session, Product, Purchase, TabAdjustment, Tab
 
-DEFAULT_PERIOD = "90d"
+DEFAULT_PERIOD = "30d"
 HOME_KPI_DAYS = 30
 # Spans up to this many days are bucketed by day; longer spans by month.
 DAY_BUCKET_MAX_DAYS = 92
@@ -99,13 +100,16 @@ def home_kpis():
     }
 
 
-def _resolve_period(request, now):
+def _resolve_period(request, now, base_qs=None, default=DEFAULT_PERIOD):
     """Return (code, label, start, end) for the requested window.
 
     ``end`` is None for windows that run up to "now"; a bounded datetime for a
-    calendar year.
+    calendar year. ``base_qs`` scopes the "all time" start date and is the
+    Purchase queryset the window applies to (all purchases globally, or a single
+    tab's). ``default`` is the window used when none is requested.
     """
-    code = (request.GET.get("period") if request else None) or DEFAULT_PERIOD
+    base_qs = Purchase.objects if base_qs is None else base_qs
+    code = (request.GET.get("period") if request else None) or default
 
     if code == "30d":
         return code, "Last 30 days", now - timedelta(days=30), None
@@ -115,7 +119,7 @@ def _resolve_period(request, now):
         return code, "Last 12 months", now - timedelta(days=365), None
     if code == "all":
         first = (
-            Purchase.objects.order_by("created_at")
+            base_qs.order_by("created_at")
             .values_list("created_at", flat=True)
             .first()
         )
@@ -127,20 +131,49 @@ def _resolve_period(request, now):
         )
         return code, str(year), start, start.replace(year=year + 1)
 
-    # Unknown code -> fall back to the default window.
-    return DEFAULT_PERIOD, "Last 90 days", now - timedelta(days=90), None
+    # Unknown code -> fall back to the requested default window.
+    if code != default:
+        return _resolve_period(None, now, base_qs=base_qs, default=default)
+    return DEFAULT_PERIOD, "Last 30 days", now - timedelta(days=30), None
 
 
-def _period_options(now, current):
+def _period_options(now, current, base_qs=None):
     """Selector entries: fixed windows + each calendar year with data + all."""
+    base_qs = Purchase.objects if base_qs is None else base_qs
     entries = [("30d", "30 days"), ("90d", "90 days"), ("12m", "12 months")]
-    for d in Purchase.objects.dates("created_at", "year", order="DESC"):
+    for d in base_qs.dates("created_at", "year", order="DESC"):
         entries.append((str(d.year), str(d.year)))
     entries.append(("all", "All time"))
     return [
         {"code": code, "label": label, "active": code == current}
         for code, label in entries
     ]
+
+
+def _type_counts(by_key, keys):
+    """{'in': [...], 'out': [...], 'unknown': [...]} aligned to keys.
+
+    ``by_key`` maps each key to a {'in','out','unknown'} count dict.
+    """
+    return {
+        label: [by_key[k][label] for k in keys]
+        for label in ("in", "out", "unknown")
+    }
+
+
+def _normalized_avg(counts_by_key, keys, scale_total):
+    """A reference distribution scaled to ``scale_total``, aligned to ``keys``.
+
+    ``counts_by_key`` is a {key: count} distribution (e.g. all tabs' purchases
+    by hour). It is turned into per-key shares and rescaled to ``scale_total``
+    (e.g. one tab's purchase count) so the result is directly comparable in
+    magnitude to that tab's own stacked bars -- it answers "what would this
+    distribution look like if the tab followed the average pattern".
+    """
+    total = sum(counts_by_key.values())
+    if not total or not scale_total:
+        return [0.0 for _ in keys]
+    return [round(counts_by_key.get(k, 0) / total * scale_total, 2) for k in keys]
 
 
 def _bucket_keys(start, end, bucket):
@@ -175,6 +208,33 @@ def _bucketed(rows, bucket, field):
     return {(r["b"].year, r["b"].month): _f(r[field]) for r in rows}
 
 
+# price_type values to surface, in display order. None (unclassified) is mapped
+# to the "unknown" key so it can be stacked alongside in/out.
+_PRICE_TYPES = [("in", "in"), ("out", "out"), (None, "unknown")]
+
+
+def _type_revenue_series(qs, trunc, bucket, keys):
+    """Revenue per bucket split by price_type.
+
+    Returns {"in": [...], "out": [...], "unknown": [...]} with one float per
+    bucket key, aligned to ``keys``.
+    """
+    series = {}
+    for value, label in _PRICE_TYPES:
+        rows = (
+            qs.filter(price_type=value)
+            if value is not None
+            else qs.filter(price_type__isnull=True)
+        )
+        bucketed = _bucketed(
+            rows.annotate(b=trunc("created_at")).values("b").annotate(v=Sum("total")),
+            bucket,
+            "v",
+        )
+        series[label] = [bucketed.get(k, 0.0) for k in keys]
+    return series
+
+
 def dashboard_context(request):
     """Full period-driven payload for the dedicated Insights page."""
     now = timezone.now()
@@ -200,6 +260,15 @@ def dashboard_context(request):
     adjustment_qs = TabAdjustment.objects.filter(**adjustment_filter)
     tab_adjustments = adjustment_qs.aggregate(s=Sum("sum"))["s"] or Decimal("0")
 
+    # In (member) vs out (guest) revenue over the period. Purchases with an
+    # empty price_type (single-price products, custom amounts, unclassifiable
+    # backfilled rows) are excluded from the share so it reflects only revenue
+    # we can actually attribute.
+    in_revenue = period_qs.filter(price_type="in").aggregate(s=Sum("total"))["s"] or Decimal("0")
+    out_revenue = period_qs.filter(price_type="out").aggregate(s=Sum("total"))["s"] or Decimal("0")
+    classified_revenue = in_revenue + out_revenue
+    out_share = (out_revenue / classified_revenue * 100) if classified_revenue else Decimal("0")
+
     kpis = {
         "period_label": label,
         "revenue": revenue,
@@ -211,6 +280,9 @@ def dashboard_context(request):
         "credit": credit,
         "debt": debt,
         "net": net,
+        "in_revenue": in_revenue,
+        "out_revenue": out_revenue,
+        "out_share": out_share,
     }
 
     # ---- Bucket keys shared by trend & cashflow -------------------------
@@ -269,13 +341,58 @@ def dashboard_context(request):
         "v",
     )
     in_by_bucket = _bucketed(
-        reimb_qs
+        adjustment_qs
         .annotate(b=trunc("created_at"))
         .values("b")
         .annotate(v=Sum("sum")),
         bucket,
         "v",
     )
+
+    # ---- In vs out: revenue split over time -----------------------------
+    inout_trend = _type_revenue_series(period_qs, trunc, bucket, keys)
+
+    # ---- Top spenders split by in/out/unknown ---------------------------
+    spender_names = [r["tab__name"] for r in top_spenders]
+    spender_split = {n: {"in": 0.0, "out": 0.0, "unknown": 0.0} for n in spender_names}
+    for r in (
+        period_qs.filter(tab__name__in=spender_names)
+        .values("tab__name", "price_type")
+        .annotate(v=Sum("total"))
+    ):
+        spender_split[r["tab__name"]][r["price_type"] or "unknown"] = _f(r["v"])
+
+    # ---- Guest-heavy / member-heavy products ----------------------------
+    # Per-product in/out revenue, kept only for products with at least
+    # MIN_SHARE_PRODUCT_PURCHASES classified purchases so a single sale can't
+    # top either chart. Ranked two ways: by out (guest) share and by in
+    # (member) share of classified revenue.
+    MIN_SHARE_PRODUCT_PURCHASES = 5
+    by_product = defaultdict(lambda: {"in": 0.0, "out": 0.0, "n": 0})
+    for r in (
+        products_qs.exclude(price_type__isnull=True)
+        .values("product__name", "price_type")
+        .annotate(v=Sum("total"), n=Count("id"))
+    ):
+        entry = by_product[r["product__name"]]
+        entry[r["price_type"]] = _f(r["v"])
+        entry["n"] += r["n"]
+    product_shares = []
+    for name, e in by_product.items():
+        classified = e["in"] + e["out"]
+        if classified <= 0 or e["n"] < MIN_SHARE_PRODUCT_PURCHASES:
+            continue
+        product_shares.append(
+            {
+                "name": name,
+                "in": e["in"],
+                "out": e["out"],
+                "in_share": e["in"] / classified * 100,
+                "out_share": e["out"] / classified * 100,
+            }
+        )
+    guest_products = sorted(product_shares, key=lambda p: p["out_share"], reverse=True)[:15]
+    member_products = sorted(product_shares, key=lambda p: p["in_share"], reverse=True)[:15]
 
     # ---- Session stats (sessions ended within the period) ---------------
     session_filter = {"ended_at__isnull": False, "ended_at__gte": start}
@@ -322,18 +439,21 @@ def dashboard_context(request):
     }
 
     # ---- Activity patterns (over the period, local time) ----------------
-    by_hour = {
-        r["h"]: r["n"]
-        for r in period_qs.annotate(h=ExtractHour("created_at", tzinfo=LOCAL_TZ))
-        .values("h")
+    # Purchase counts split by price_type, both by hour-of-day and weekday.
+    by_hour = defaultdict(lambda: {"in": 0, "out": 0, "unknown": 0})
+    for r in (
+        period_qs.annotate(h=ExtractHour("created_at", tzinfo=LOCAL_TZ))
+        .values("h", "price_type")
         .annotate(n=Count("id"))
-    }
-    by_dow = {
-        r["w"]: r["n"]
-        for r in period_qs.annotate(w=ExtractWeekDay("created_at", tzinfo=LOCAL_TZ))
-        .values("w")
+    ):
+        by_hour[r["h"]][r["price_type"] or "unknown"] = r["n"]
+    by_dow = defaultdict(lambda: {"in": 0, "out": 0, "unknown": 0})
+    for r in (
+        period_qs.annotate(w=ExtractWeekDay("created_at", tzinfo=LOCAL_TZ))
+        .values("w", "price_type")
         .annotate(n=Count("id"))
-    }
+    ):
+        by_dow[r["w"]][r["price_type"] or "unknown"] = r["n"]
 
     # ---- Chart payloads (JSON-safe) -------------------------------------
     charts = {
@@ -356,22 +476,42 @@ def dashboard_context(request):
             "values": [_f(r["v"]) for r in group_rev],
         },
         "spenders": {
-            "labels": [r["tab__name"] for r in top_spenders],
-            "values": [_f(r["v"]) for r in top_spenders],
+            "labels": spender_names,
+            "in": [spender_split[n]["in"] for n in spender_names],
+            "out": [spender_split[n]["out"] for n in spender_names],
+            "unknown": [spender_split[n]["unknown"] for n in spender_names],
         },
         "cashflow": {
             "labels": bucket_labels,
             "out": [out_by_bucket.get(k, 0.0) for k in keys],
             "in": [in_by_bucket.get(k, 0.0) for k in keys],
         },
+        "inout_trend": {
+            "labels": bucket_labels,
+            "in": inout_trend["in"],
+            "out": inout_trend["out"],
+            "unknown": inout_trend["unknown"],
+        },
+        "guest_products": {
+            "labels": [p["name"] for p in guest_products],
+            "share": [p["out_share"] for p in guest_products],
+            "in": [p["in"] for p in guest_products],
+            "out": [p["out"] for p in guest_products],
+        },
+        "member_products": {
+            "labels": [p["name"] for p in member_products],
+            "share": [p["in_share"] for p in member_products],
+            "in": [p["in"] for p in member_products],
+            "out": [p["out"] for p in member_products],
+        },
         "balances": {"credit": _f(kpis["credit"]), "debt": _f(abs(kpis["debt"]))},
         "hours": {
             "labels": [f"{h:02d}" for h in range(24)],
-            "values": [by_hour.get(h, 0) for h in range(24)],
+            **_type_counts(by_hour, list(range(24))),
         },
         "dow": {
             "labels": _DOW_LABELS,
-            "values": [by_dow.get(d, 0) for d in _DOW_ORDER],
+            **_type_counts(by_dow, _DOW_ORDER),
         },
     }
 
@@ -380,4 +520,227 @@ def dashboard_context(request):
         "session": session_stats,
         "charts": charts,
         "periods": _period_options(now, code),
+    }
+
+
+def tab_dashboard_context(request, tab):
+    """Period-driven payload for a single tab's Insights page.
+
+    Mirrors :func:`dashboard_context` but scoped to one tab, and adds a running
+    balance reconstructed from that tab's purchases (debits) and adjustments
+    (credits). Defaults to the all-time window since a single member's history
+    is usually short enough to view whole.
+    """
+    now = timezone.now()
+    tab_purchases = Purchase.objects.filter(tab=tab)
+    tab_adjustments = TabAdjustment.objects.filter(tab=tab)
+    code, label, start, end = _resolve_period(
+        request, now, base_qs=tab_purchases, default="all"
+    )
+    last_instant = (end - timedelta(microseconds=1)) if end else now
+    bucket = "day" if (last_instant - start).days <= DAY_BUCKET_MAX_DAYS else "month"
+    trunc = TruncDate if bucket == "day" else TruncMonth
+
+    period_filter = {"created_at__gte": start}
+    if end:
+        period_filter["created_at__lt"] = end
+    period_qs = tab_purchases.filter(**period_filter)
+    adjustment_qs = tab_adjustments.filter(**period_filter)
+
+    # ---- KPI cards ------------------------------------------------------
+    spent = period_qs.aggregate(s=Sum("total"))["s"] or Decimal("0")
+    count = period_qs.count()
+    adjustments = adjustment_qs.aggregate(s=Sum("sum"))["s"] or Decimal("0")
+    lifetime_spent = tab_purchases.aggregate(s=Sum("total"))["s"] or Decimal("0")
+    lifetime_adjustments = tab_adjustments.aggregate(s=Sum("sum"))["s"] or Decimal("0")
+
+    in_revenue = period_qs.filter(price_type="in").aggregate(s=Sum("total"))["s"] or Decimal("0")
+    out_revenue = period_qs.filter(price_type="out").aggregate(s=Sum("total"))["s"] or Decimal("0")
+    classified_revenue = in_revenue + out_revenue
+    out_share = (out_revenue / classified_revenue * 100) if classified_revenue else Decimal("0")
+
+    first_activity = (
+        tab_purchases.order_by("created_at").values_list("created_at", flat=True).first()
+    )
+    last_activity = (
+        tab_purchases.order_by("-created_at").values_list("created_at", flat=True).first()
+    )
+
+    kpis = {
+        "period_label": label,
+        "balance": tab.balance,
+        "spent": spent,
+        "count": count,
+        "avg_purchase": (spent / count) if count else Decimal("0"),
+        "adjustments": adjustments,
+        "lifetime_spent": lifetime_spent,
+        "lifetime_adjustments": lifetime_adjustments,
+        "in_revenue": in_revenue,
+        "out_revenue": out_revenue,
+        "out_share": out_share,
+        "first_activity": first_activity,
+        "last_activity": last_activity,
+    }
+
+    # ---- Bucket keys shared by every time series ------------------------
+    keys, bucket_labels = _bucket_keys(start, last_instant, bucket)
+
+    purchases_by_bucket = _bucketed(
+        period_qs.annotate(b=trunc("created_at")).values("b").annotate(v=Sum("total")),
+        bucket,
+        "v",
+    )
+    adj_by_bucket = _bucketed(
+        adjustment_qs.annotate(b=trunc("created_at")).values("b").annotate(v=Sum("sum")),
+        bucket,
+        "v",
+    )
+
+    # ---- Running balance ------------------------------------------------
+    # Anchor the reconstruction to the authoritative current balance rather than
+    # summing the ledger from zero: "undo" every purchase/adjustment from the
+    # window start until now to get the opening balance, then replay each bucket.
+    # This makes the series end exactly on the tab's current balance for windows
+    # running up to now, and stays correct even when the stored balance has
+    # drifted from the ledger or the tab had an opening balance predating it.
+    net_since_start = (
+        (tab_adjustments.filter(created_at__gte=start).aggregate(s=Sum("sum"))["s"] or Decimal("0"))
+        - (tab_purchases.filter(created_at__gte=start).aggregate(s=Sum("total"))["s"] or Decimal("0"))
+    )
+    opening = tab.balance - net_since_start
+    running = []
+    bal = float(opening)
+    for k in keys:
+        bal += adj_by_bucket.get(k, 0.0) - purchases_by_bucket.get(k, 0.0)
+        running.append(round(bal, 2))
+
+    # ---- Top products & groups ------------------------------------------
+    products_qs = period_qs.filter(product__isnull=False)
+    top_qty = list(
+        products_qs.values("product__name").annotate(v=Sum("quantity")).order_by("-v")[:15]
+    )
+    top_rev = list(
+        products_qs.values("product__name").annotate(v=Sum("total")).order_by("-v")[:15]
+    )
+    group_rev = list(
+        period_qs.values("product__group__name").annotate(v=Sum("total")).order_by("-v")
+    )
+
+    # ---- In vs out spending over time -----------------------------------
+    inout_trend = _type_revenue_series(period_qs, trunc, bucket, keys)
+
+    # ---- Session stats (sessions this tab hosted, ended in the period) --
+    session_filter = {"tab": tab, "ended_at__isnull": False, "ended_at__gte": start}
+    if end:
+        session_filter["ended_at__lt"] = end
+    session_revenue = Coalesce(
+        Subquery(
+            Purchase.objects.filter(
+                tab=OuterRef("tab"),
+                created_at__gte=OuterRef("started_at"),
+                created_at__lte=OuterRef("ended_at"),
+            )
+            .values("tab")
+            .annotate(s=Sum("total"))
+            .values("s")[:1],
+            output_field=DecimalField(max_digits=12, decimal_places=2),
+        ),
+        Value(Decimal("0")),
+        output_field=DecimalField(max_digits=12, decimal_places=2),
+    )
+    sessions = list(
+        Session.objects.filter(**session_filter).annotate(
+            rev=session_revenue,
+            dur=ExpressionWrapper(
+                F("ended_at") - F("started_at"), output_field=DurationField()
+            ),
+        )
+    )
+    h_count = len(sessions)
+    total_people = sum(h.people or 0 for h in sessions)
+    total_rev = sum((h.rev for h in sessions), Decimal("0"))
+    total_seconds = sum(h.dur.total_seconds() for h in sessions if h.dur)
+    session_stats = {
+        "count": h_count,
+        "people": total_people,
+        "revenue": total_rev,
+        "avg_per_session": (total_rev / h_count) if h_count else Decimal("0"),
+        "avg_per_person": (total_rev / total_people) if total_people else Decimal("0"),
+        "avg_hours": (total_seconds / 3600 / h_count) if h_count else 0,
+    }
+
+    # ---- Activity patterns (local time) ---------------------------------
+    by_hour = defaultdict(lambda: {"in": 0, "out": 0, "unknown": 0})
+    for r in (
+        period_qs.annotate(h=ExtractHour("created_at", tzinfo=LOCAL_TZ))
+        .values("h", "price_type")
+        .annotate(n=Count("id"))
+    ):
+        by_hour[r["h"]][r["price_type"] or "unknown"] = r["n"]
+    by_dow = defaultdict(lambda: {"in": 0, "out": 0, "unknown": 0})
+    for r in (
+        period_qs.annotate(w=ExtractWeekDay("created_at", tzinfo=LOCAL_TZ))
+        .values("w", "price_type")
+        .annotate(n=Count("id"))
+    ):
+        by_dow[r["w"]][r["price_type"] or "unknown"] = r["n"]
+
+    # Reference distribution: every tab's purchases over the same window, so the
+    # comparison bars show how this tab's timing compares to the club average.
+    global_qs = Purchase.objects.filter(**period_filter)
+    global_hour = {
+        r["h"]: r["n"]
+        for r in global_qs.annotate(h=ExtractHour("created_at", tzinfo=LOCAL_TZ))
+        .values("h")
+        .annotate(n=Count("id"))
+    }
+    global_dow = {
+        r["w"]: r["n"]
+        for r in global_qs.annotate(w=ExtractWeekDay("created_at", tzinfo=LOCAL_TZ))
+        .values("w")
+        .annotate(n=Count("id"))
+    }
+
+    charts = {
+        "balance": {"labels": bucket_labels, "values": running},
+        "cashflow": {
+            "labels": bucket_labels,
+            "out": [purchases_by_bucket.get(k, 0.0) for k in keys],
+            "in": [adj_by_bucket.get(k, 0.0) for k in keys],
+        },
+        "top_qty": {
+            "labels": [r["product__name"] for r in top_qty],
+            "values": [_f(r["v"]) for r in top_qty],
+        },
+        "top_rev": {
+            "labels": [r["product__name"] for r in top_rev],
+            "values": [_f(r["v"]) for r in top_rev],
+        },
+        "groups": {
+            "labels": [r["product__group__name"] or "Oma summa / muu" for r in group_rev],
+            "values": [_f(r["v"]) for r in group_rev],
+        },
+        "inout_trend": {
+            "labels": bucket_labels,
+            "in": inout_trend["in"],
+            "out": inout_trend["out"],
+            "unknown": inout_trend["unknown"],
+        },
+        "hours": {
+            "labels": [f"{h:02d}" for h in range(24)],
+            **_type_counts(by_hour, list(range(24))),
+            "avg": _normalized_avg(global_hour, list(range(24)), count),
+        },
+        "dow": {
+            "labels": _DOW_LABELS,
+            **_type_counts(by_dow, _DOW_ORDER),
+            "avg": _normalized_avg(global_dow, _DOW_ORDER, count),
+        },
+    }
+
+    return {
+        "kpis": kpis,
+        "session": session_stats,
+        "charts": charts,
+        "periods": _period_options(now, code, base_qs=tab_purchases),
     }

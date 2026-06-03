@@ -49,6 +49,10 @@
       <span class="kpi__label">Adjustments</span>
     </div>
     <div class="kpi">
+      <span class="kpi__value">{{ kpis.out_share|floatformat:1 }} %</span>
+      <span class="kpi__label">Out (guest) revenue share</span>
+    </div>
+    <div class="kpi">
       <span class="kpi__value">{{ kpis.active_tabs }}</span>
       <span class="kpi__label">Active tabs</span>
     </div>
@@ -93,8 +97,20 @@
       <div class="chart-box"><canvas id="chartSpenders"></canvas></div>
     </div>
     <div class="card card--wide">
-      <h2>Money in vs out</h2>
+      <h2>Adjustments &amp; Purchases</h2>
       <div class="chart-box chart-box--wide"><canvas id="chartCashflow"></canvas></div>
+    </div>
+    <div class="card card--wide">
+      <h2>In vs out revenue over time</h2>
+      <div class="chart-box chart-box--wide"><canvas id="chartInoutTrend"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Member-heavy products (in share)</h2>
+      <div class="chart-box chart-box--tall"><canvas id="chartMemberProducts"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Guest-heavy products (out share)</h2>
+      <div class="chart-box chart-box--tall"><canvas id="chartGuestProducts"></canvas></div>
     </div>
     <div class="card">
       <h2>Purchases by hour (EET/EEST)</h2>
@@ -133,9 +149,57 @@
   var PALETTE = ["#79aec8", "#417690", "#70bf2b", "#efb80b", "#ba2121",
                  "#9b59b6", "#1abc9c", "#e67e22", "#34495e", "#c0392b"];
 
+  // In (member) / out (guest) / unclassified colours, shared by every split chart.
+  var IN_COLOR = "#417690";
+  var OUT_COLOR = "#efb80b";
+  var UNKNOWN_COLOR = "#b0b0b0";
+
   function euro(v) { return v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " €"; }
 
   function el(id) { return document.getElementById(id); }
+
+  // Inline plugin: draw the per-bar stack total at the end of each stacked bar.
+  // The label is skipped when the bar is too narrow (vertical) or too short
+  // (horizontal) to fit the text, so dense charts stay readable. Pass a
+  // formatter via options.plugins.stackTotals.formatter.
+  var stackTotalsPlugin = {
+    id: "stackTotals",
+    afterDatasetsDraw: function (chart, args, opts) {
+      var ctx = chart.ctx;
+      var horizontal = chart.options.indexAxis === "y";
+      var fmt = (opts && opts.formatter) || function (v) { return v; };
+      var meta0 = chart.getDatasetMeta(0);
+      if (!meta0 || !meta0.data) return;
+      ctx.save();
+      ctx.fillStyle = "#333";
+      ctx.font = "bold 11px sans-serif";
+      for (var i = 0; i < meta0.data.length; i++) {
+        var total = 0, hasValue = false, lastEl = null;
+        for (var d = 0; d < chart.data.datasets.length; d++) {
+          if (!chart.isDatasetVisible(d)) continue;
+          var v = chart.data.datasets[d].data[i];
+          if (v === null || v === undefined) continue;
+          total += v;
+          var elem = chart.getDatasetMeta(d).data[i];
+          if (elem) { lastEl = elem; hasValue = true; }
+        }
+        if (!hasValue || total === 0 || !lastEl) continue;
+        var text = fmt(total);
+        if (horizontal) {
+          if (lastEl.height < 12) continue;          // too short to label
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          ctx.fillText(text, lastEl.x + 4, lastEl.y);
+        } else {
+          if (ctx.measureText(text).width > lastEl.width) continue;  // too narrow
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(text, lastEl.x, lastEl.y - 4);
+        }
+      }
+      ctx.restore();
+    }
+  };
 
   var dailyDatasets = [
     {label: "Revenue (€)", data: data.daily.revenue, backgroundColor: ACCENT2}
@@ -168,7 +232,70 @@
   }
   hbar("chartTopQty", data.top_qty, ACCENT, false);
   hbar("chartTopRev", data.top_rev, ACCENT2, true);
-  hbar("chartSpenders", data.spenders, GOOD, true);
+
+  // Top spenders, stacked by in / out / unclassified revenue.
+  new Chart(el("chartSpenders"), {
+    type: "bar",
+    data: {
+      labels: data.spenders.labels,
+      datasets: [
+        {label: "In", data: data.spenders.in, backgroundColor: IN_COLOR},
+        {label: "Out", data: data.spenders.out, backgroundColor: OUT_COLOR},
+        {label: "Unclassified", data: data.spenders.unknown, backgroundColor: UNKNOWN_COLOR}
+      ]
+    },
+    options: {
+      indexAxis: "y", responsive: true, maintainAspectRatio: false,
+      scales: {x: {stacked: true}, y: {stacked: true}},
+      plugins: {
+        stackTotals: {formatter: euro},
+        tooltip: {callbacks: {label: function (c) { return c.dataset.label + ": " + euro(c.parsed.x); }}}
+      }
+    },
+    plugins: [stackTotalsPlugin]
+  });
+
+  // In vs out revenue over time (stacked).
+  new Chart(el("chartInoutTrend"), {
+    type: "bar",
+    data: {
+      labels: data.inout_trend.labels,
+      datasets: [
+        {label: "In (€)", data: data.inout_trend.in, backgroundColor: IN_COLOR},
+        {label: "Out (€)", data: data.inout_trend.out, backgroundColor: OUT_COLOR},
+        {label: "Unclassified (€)", data: data.inout_trend.unknown, backgroundColor: UNKNOWN_COLOR}
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
+      scales: {x: {stacked: true}, y: {stacked: true, title: {display: true, text: "€"}}},
+      plugins: {
+        stackTotals: {formatter: euro},
+        tooltip: {callbacks: {label: function (c) { return c.dataset.label + ": " + euro(c.parsed.y); }}}
+      }
+    },
+    plugins: [stackTotalsPlugin]
+  });
+
+  // Product share charts: out (guest) or in (member) share of classified revenue.
+  function shareChart(id, chart, color, axisText, shareLabel) {
+    new Chart(el(id), {
+      type: "bar",
+      data: {labels: chart.labels, datasets: [{data: chart.share, backgroundColor: color}]},
+      options: {
+        indexAxis: "y", responsive: true, maintainAspectRatio: false,
+        scales: {x: {max: 100, title: {display: true, text: axisText}}},
+        plugins: {legend: {display: false},
+          tooltip: {callbacks: {label: function (c) {
+            var i = c.dataIndex;
+            return c.parsed.x.toFixed(1) + "% " + shareLabel + "  (out " + euro(chart.out[i]) +
+                   " / in " + euro(chart.in[i]) + ")";
+          }}}}
+      }
+    });
+  }
+  shareChart("chartGuestProducts", data.guest_products, OUT_COLOR, "% out", "out");
+  shareChart("chartMemberProducts", data.member_products, IN_COLOR, "% in", "in");
 
   // Sales by group (doughnut)
   new Chart(el("chartGroups"), {
@@ -184,27 +311,36 @@
     data: {
       labels: data.cashflow.labels,
       datasets: [
-        {label: "In (adjustments)", data: data.cashflow.in, backgroundColor: GOOD},
-        {label: "Out (purchases)", data: data.cashflow.out, backgroundColor: BAD}
+        {label: "Adjustments", data: data.cashflow.in, backgroundColor: GOOD},
+        {label: "Purchases", data: data.cashflow.out, backgroundColor: BAD}
       ]
     },
     options: {responsive: true, maintainAspectRatio: false,
       scales: {y: {title: {display: true, text: "€"}}}}
   });
 
-  // Activity by hour
-  new Chart(el("chartHours"), {
-    type: "bar",
-    data: {labels: data.hours.labels, datasets: [{data: data.hours.values, backgroundColor: ACCENT}]},
-    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}}
-  });
-
-  // Activity by weekday
-  new Chart(el("chartDow"), {
-    type: "bar",
-    data: {labels: data.dow.labels, datasets: [{data: data.dow.values, backgroundColor: ACCENT2}]},
-    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}}
-  });
+  // Purchase-count split into in / out / unclassified, stacked.
+  function stackedCounts(id, chart) {
+    new Chart(el(id), {
+      type: "bar",
+      data: {
+        labels: chart.labels,
+        datasets: [
+          {label: "In", data: chart.in, backgroundColor: IN_COLOR},
+          {label: "Out", data: chart.out, backgroundColor: OUT_COLOR},
+          {label: "Unclassified", data: chart.unknown, backgroundColor: UNKNOWN_COLOR}
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
+        scales: {x: {stacked: true}, y: {stacked: true}},
+        plugins: {stackTotals: {}}
+      },
+      plugins: [stackTotalsPlugin]
+    });
+  }
+  stackedCounts("chartHours", data.hours);
+  stackedCounts("chartDow", data.dow);
 })();
 </script>
 {% endblock %}
