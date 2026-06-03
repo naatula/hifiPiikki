@@ -190,6 +190,7 @@ class TabAdjustmentAdmin(MyModelAdmin):
     list_filter = ('tab',)
     search_fields = ('tab__name', 'description',)
     date_hierarchy = 'created_at'
+    ordering = ('-created_at',)
 
     def get_fields(self, request, obj=None):
         fields = list(super().get_fields(request, obj))
