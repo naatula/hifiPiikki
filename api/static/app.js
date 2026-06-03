@@ -4,7 +4,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     var checkoutTab = null
     var activeHost = null
     var busy = false
-    var previousQuantity = 1
     var csrftoken = null
 
     const tabsById = {}
@@ -62,20 +61,41 @@ document.addEventListener("DOMContentLoaded", async () => {
         return true
     }
 
-    const getPrice = () => {
-        if(document.querySelector('#custom-price')) {
-            const value = parseFloat(document.querySelector('#custom-price').value.replace(',','.'))
-            if(isNaN(value) || value <= 0 || value >= 1000) {
-                return null
-            }
-            return value
-        } else if(document.querySelector('input[name="price"]:checked')?.value === 'in') {
-            return checkoutProduct.price_in
-        } else if(document.querySelector('input[name="price"]:checked')?.value === 'out' ||
-        document.querySelector('#single-price')) {
-            return checkoutProduct.price_out
+    // Read a quantity input as a non-negative integer count (0–99).
+    const readCount = (input) => {
+        if(!input) return 0
+        const value = parseInt(parseFloat(input.value.replace(',', '.')))
+        if(isNaN(value) || value < 0 || value >= 100) return 0
+        return value
+    }
+
+    // Build the purchase line items for the current checkout selection. A custom
+    // amount yields a single item; a single-price product yields one item from
+    // its count; a product with separate in/out prices yields one item per
+    // non-zero count, so both prices can be purchased at once.
+    const getLineItems = () => {
+        if(checkoutProduct === null) return []
+        const customPrice = document.querySelector('#custom-price')
+        if(customPrice) {
+            const value = parseFloat(customPrice.value.replace(',', '.'))
+            if(isNaN(value) || value <= 0 || value >= 1000) return []
+            return [{ quantity: 1, total: value.toFixed(2) }]
         }
-        return null
+        const items = []
+        // Only tag in/out when the product actually has two distinct prices;
+        // a single-price product is left untagged (price_type empty).
+        const hasDistinctPrices = checkoutProduct.price_in !== checkoutProduct.price_out
+        const inCount = readCount(document.querySelector('#quantity-in'))
+        if(inCount > 0) {
+            items.push({ quantity: inCount, total: (inCount * parseFloat(checkoutProduct.price_in)).toFixed(2), price_type: 'in' })
+        }
+        const outCount = readCount(document.querySelector('#quantity-out'))
+        if(outCount > 0) {
+            const item = { quantity: outCount, total: (outCount * parseFloat(checkoutProduct.price_out)).toFixed(2) }
+            if(hasDistinctPrices) item.price_type = 'out'
+            items.push(item)
+        }
+        return items
     }
 
     const getTab = () => {
@@ -86,12 +106,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         return tab
     }
 
-    const getQuantity = () => {
-        const quantity = parseInt(parseFloat(document.querySelector('#quantity').value) * 100) / 100
-        if(isNaN(quantity) || quantity <= 0 || quantity >= 100) {
-            return 1
-        }
-        return quantity
+    // Clamp a quantity input to a whole number in 0–99.
+    const normalizeCount = (input) => {
+        let value = parseInt(parseFloat(input.value.replace(',', '.')))
+        if(isNaN(value) || value < 0) value = 0
+        if(value > 99) value = 99
+        input.value = value
+    }
+
+    // Step a quantity input by the given amount (used by the − and + buttons).
+    const stepCount = (input, difference) => {
+        let value = parseInt(parseFloat(input.value.replace(',', '.')))
+        if(isNaN(value)) value = 0
+        value = Math.min(99, Math.max(0, value + difference))
+        input.value = value
+        updateConfirmation()
     }
 
     const toLogin = (message = null) => {
@@ -135,32 +164,39 @@ document.addEventListener("DOMContentLoaded", async () => {
         confirmPurchase()
     }
 
-    const confirmPurchase = async () => {
-        if(busy) return
-        const quantity = getQuantity()
-        var price = getPrice()
-        const total = (quantity * price).toFixed(2)
-        const tab = getTab()
-        if(price === null || quantity === null || isNaN(total) || tab === null) return
-        busy = true
-        const request = fetch('../api/purchases/', {
+    // POST a single purchase line item. PIN is included only when provided.
+    const postPurchase = (item, pin, token, tab) => {
+        const body = {
+            "tab": tab.id,
+            "quantity": item.quantity,
+            "total": item.total,
+            "product": checkoutProduct?.id,
+        }
+        if(item.price_type) body.price_type = item.price_type
+        if(pin !== null) body.pin = pin
+        return fetch('../api/purchases/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': await getCsrfToken()
+                'X-CSRFToken': token
             },
-            body: JSON.stringify({
-                "tab": tab.id,
-                "quantity": quantity,
-                "total": total,
-                "product": checkoutProduct?.id,
-            })
+            body: JSON.stringify(body)
         })
+    }
+
+    const confirmPurchase = async () => {
+        if(busy) return
+        const items = getLineItems()
+        const tab = getTab()
+        if(items.length === 0 || tab === null) return
+        busy = true
+        const token = await getCsrfToken()
+        const requests = items.map((item) => postPurchase(item, null, token, tab))
         document.querySelector('#confirmation').classList.add('ok')
         audio.play()
         setTimeout( async () => {
-            const response = await request
-            if(checkResponse(response)) {
+            const responses = await Promise.all(requests)
+            if(responses.every(checkResponse)) {
                 busy = false
                 toMain()
             } else {
@@ -171,26 +207,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const submitPinPurchase = async (pin) => {
         if(busy) return
-        const quantity = getQuantity()
-        var price = getPrice()
-        const total = (quantity * price).toFixed(2)
+        const items = getLineItems()
         const tab = getTab()
-        if(price === null || quantity === null || isNaN(total) || tab === null) return
-        const response = await fetch('../api/purchases/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': await getCsrfToken()
-            },
-            body: JSON.stringify({
-                "tab": tab.id,
-                "quantity": quantity,
-                "total": total,
-                "product": checkoutProduct?.id,
-                "pin": pin
-            })
-        })
-        if(response.status === 200) {
+        if(items.length === 0 || tab === null) return
+        const token = await getCsrfToken()
+        // Send the items one at a time so a wrong PIN aborts before any purchase
+        // is made (and the attempt counter is only bumped once).
+        var response = null
+        for(const item of items) {
+            response = await postPurchase(item, pin, token, tab)
+            if(response.status !== 200) break
+        }
+        if(response && response.status === 200) {
             busy = true
             document.querySelector('#confirmation').classList.add('ok')
             audio.play()
@@ -294,14 +322,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const updateConfirmation = () => {
         if(busy) return
-        const quantity = getQuantity()
-        var price = getPrice()
-        const total = (quantity * price).toFixed(2)
+        const items = getLineItems()
+        const total = items.reduce((sum, item) => sum + parseFloat(item.total), 0)
         const div = document.querySelector('#confirmation .summary')
         const tab = getTab()
         const button = document.querySelector('#confirmation .button')
         const confirmation = document.querySelector('#confirmation')
-        if(price === null || tab === null) {
+        if(items.length === 0 || tab === null) {
             div.innerHTML = ``
             button.classList.add('disabled')
         } else {
@@ -321,21 +348,26 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     }
 
-    const changeQuantity = (difference) => {
-        const quantity = document.querySelector('#quantity')
-        const newQuantity = Math.round(getQuantity() + difference)
-        quantity.value = newQuantity
-        formatQuantity().then(updateConfirmation)
-    }
+    // Markup for one quantity row: a title, optional unit price, and a stepper
+    // (− input +). Used for the single-price "Määrä" row and the in/out rows.
+    const quantityRowHtml = (id, label, priceText, initial) => `
+        <div class="checkout-quantity">
+            <h2>${label}</h2>
+            ${priceText ? `<span class="row-price">${priceText}</span>` : ''}
+            <div class="quantity-button decrease">−</div>
+            <input class="quantity-input" id="${id}" type="number" inputmode="numeric" value="${initial}">
+            <div class="quantity-button increase">+</div>
+        </div>`
 
-    const formatQuantity = async () =>{
-        const input = document.querySelector('#quantity')
-        const quantity = input.value.replace(',','.')
-        input.value = quantity ? `${parseInt(parseFloat(quantity) * 100) / 100}` : previousQuantity
-        if(input.value >= 100 || input.value <= 0 || isNaN(input.value.replace(',','.'))) {
-            input.value = previousQuantity
-        }
-        previousQuantity = input.value
+    // Wire the stepper buttons and input events for every rendered quantity row.
+    const wireQuantityRows = () => {
+        document.querySelectorAll('.checkout-quantity').forEach((row) => {
+            const input = row.querySelector('.quantity-input')
+            input.addEventListener('input', updateConfirmation)
+            input.addEventListener('change', () => { normalizeCount(input); updateConfirmation() })
+            row.querySelector('.decrease').addEventListener('click', () => stepCount(input, -1))
+            row.querySelector('.increase').addEventListener('click', () => stepCount(input, 1))
+        })
     }
 
     const toCheckout = async (product, element) => {
@@ -356,37 +388,21 @@ document.addEventListener("DOMContentLoaded", async () => {
             descriptionElement.style = 'display: none'
         }
 
-        document.querySelector('#checkout-quantity').style = ''
-        const priceContainer = document.querySelector('#checkout-price')
+        const options = document.querySelector('.checkout-column .options')
         if(product.id === null) {
-            // Display custom price input
-            priceContainer.innerHTML = `<h2>Summa</h2><input type="text" id="custom-price" placeholder="0,00" step="0.01"><span style="font-size: 1.5rem">€</span>`
+            // Custom amount: a free-form price with no quantity.
+            options.innerHTML = `<div id="checkout-price"><h2>Summa</h2><input type="text" id="custom-price" placeholder="0,00" step="0.01"><span style="font-size: 1.5rem">€</span></div>`
             document.querySelector('input#custom-price').addEventListener('input', updateConfirmation)
-            // Hide quantity input
-            document.querySelector('#checkout-quantity').style = 'display: none'
         }
         else if(product.price_in === product.price_out) {
-            priceContainer.innerHTML = `<h2>Hinta</h2><span id="single-price">${f_price_out}</span>`
+            // Single price: one quantity input with the price shown beside it.
+            options.innerHTML = quantityRowHtml('quantity-out', 'Määrä', f_price_out, 1)
         } else {
-            priceContainer.innerHTML = `<h2>Hinta</h2>
-            <div id="price-choice">
-                <input type="radio" name="price" id="in" value="in">
-                <label for="in" class="radio-custom btn btn-white">
-                    sisään ${f_price_in}
-                </label>
-
-                <input type="radio" name="price" id="out" value="out">
-                <label for="out" class="radio-custom btn btn-white">
-                    ulos ${f_price_out}
-                </label>
-            </div>`
+            // Separate in/out prices: a quantity input for each, both starting at 0.
+            options.innerHTML = quantityRowHtml('quantity-in', 'Sisään', f_price_in, 0) +
+                quantityRowHtml('quantity-out', 'Ulos', f_price_out, 0)
         }
-
-        document.querySelectorAll('input[type="radio"]').forEach(() => {
-        addEventListener('change', updateConfirmation)
-        })
-        document.querySelector('#quantity').value = 1
-        previousQuantity = 1
+        wireQuantityRows()
         updateConfirmation()
         await fetchTabsPromise
         document.querySelector('.main-panel').classList.remove('active')
@@ -415,7 +431,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             enteredPin = ''
             document.querySelector('.checkout-panel main').scroll(0, 0)
             document.querySelector('.checkout-panel .tab-list').scroll(0, 0)
-            document.querySelector('#checkout-price').innerHTML = ''
+            document.querySelector('.checkout-column .options').innerHTML = ''
             busy = false
         }, 250)
         checkoutProduct = null
@@ -860,18 +876,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     document.querySelector('#confirmation .button').addEventListener('click', onConfirmClick)
     document.querySelector('.checkout-panel .back').addEventListener('click', handleBackButton)
-
-    document.querySelector('#quantity').addEventListener('change', formatQuantity)
-    document.querySelector('#quantity').addEventListener('input', updateConfirmation)
-
-
-    document.querySelector('#increase').addEventListener('click', () => {
-        changeQuantity(1)
-    })
-
-    document.querySelector('#decrease').addEventListener('click', () => {
-        changeQuantity(-1)
-    })
 
     document.querySelector('#login').addEventListener('click', handleLogin)
 

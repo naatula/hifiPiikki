@@ -411,6 +411,12 @@ h3 {
 }
 
 
+.row-price {
+    font-size: 1.125rem;
+    color: var(--lightgrey);
+    white-space: nowrap;
+}
+
 .quantity-button {
     font-size: 1.5rem;
     cursor: pointer;
