@@ -418,6 +418,10 @@ h3 {
     .row-header {
         flex: 1 0 100%;
     }
+
+    .checkout-column > .options > div {
+        justify-content: center;
+    }
 }
 
 .total-price {
