@@ -56,8 +56,10 @@ Shellyn pistorasian saa kytkemään virrat automaattisesti kytkeytymään pääl
 
 ## PIN-koodit
 
-Yksittäisen piikin (Tab) voi suojata 6-numeroisella PIN-koodilla. Ylläpitäjä asettaa hallintanäkymästä piikille kentät `pin` (6 numeroa) ja `pin_required`. Kun `pin_required` on päällä, käyttäjänäkymä näyttää oston vahvistuspainikkeen sijaan numeronäppäimistön: oikean PIN-koodin syöttäminen kirjaa oston (äänellä ja kuittauksella kuten painikkeella), väärä koodi tyhjentää syötteen.
+Yksittäisen piikin (Tab) voi suojata 6-numeroisella PIN-koodilla. Ylläpitäjä asettaa hallintanäkymästä piikille kentät `pin` (6 numeroa) ja `pin_required`. Kun `pin_required` on päällä, käyttäjänäkymä näyttää oston vahvistuspainikkeen painamisen jälkeen numeronäppäimistön: oikean PIN-koodin syöttäminen kirjaa oston (äänellä ja kuittauksella kuten painikkeella), väärä koodi tyhjentää syötteen.
 
 PIN-koodi tarkistetaan aina palvelimella oston yhteydessä, eikä sitä lähetetä selaimeen. Väärät yritykset lasketaan piikin kenttään `pin_attempts`, joka näytetään käyttäjälle ja nollautuu oikean koodin syöttämisestä.
+
+Käyttäjä voi kytkeä piikin PIN-koodin päälle ja pois, mutta vain ylläpitäjä voi asettaa tai muuttaa PIN-koodeja.
 
 Liian monen väärän yrityksen jälkeen piikki voidaan lukita. Lukituksen raja määritellään Settings-avaimella `pin_lockout_threshold` (kokonaisluku). Kun `pin_attempts` saavuttaa rajan, piikki lukittuu eikä ostoja voi kirjata ennen kuin ylläpitäjä nollaa `pin_attempts`-kentän (esim. hallintanäkymän "Reset PIN attempts (unlock)" -toiminnolla). Jos avain on asettamatta, tyhjä tai ei-numeerinen, lukitus on pois käytöstä.
