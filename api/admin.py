@@ -6,6 +6,7 @@ from django.db.models import Sum
 from django.urls import path
 from decimal import Decimal
 from django_paranoid.admin import ParanoidAdmin
+from . import analytics
 from .models import Tab, ProductGroup, Product, Purchase, Setting, Session, TabAdjustment
 from .admin_views import insights_view
 
@@ -17,6 +18,7 @@ class TabAdmin(MyModelAdmin):
     list_filter = ('pin_required',)
     ordering = ('name',)
     actions = ['validate_tabs', 'activate_tabs', 'deactivate_tabs', 'reset_pin_attempts']
+    change_list_template = 'admin/api/tab/change_list.html'
     fields = ('name', 'balance', 'active', 'pin', 'pin_required', 'pin_attempts',)
 
     def get_readonly_fields(self, request, obj=None):
@@ -26,8 +28,24 @@ class TabAdmin(MyModelAdmin):
         urls = super().get_urls()
         custom_urls = [
             path('<path:object_id>/reset_pin/', self.admin_site.admin_view(self.reset_pin_view), name='api_tab_reset_pin'),
+            path('<path:object_id>/insights/', self.admin_site.admin_view(self.insights_view), name='api_tab_insights'),
+            path('negative-balances/', self.admin_site.admin_view(self.negative_balances_view), name='api_tab_negative_balances'),
         ]
         return custom_urls + urls
+
+    def insights_view(self, request, object_id):
+        from django.http import Http404
+        from django.shortcuts import render
+        tab = self.get_object(request, object_id)
+        if tab is None:
+            raise Http404('Tab not found.')
+        context = {
+            **self.admin_site.each_context(request),
+            'title': f'Insights: {tab.name}',
+            'tab': tab,
+            **analytics.tab_dashboard_context(request, tab),
+        }
+        return render(request, 'admin/api/tab/insights.html', context)
 
     def reset_pin_view(self, request, object_id):
         from django.http import HttpResponseRedirect
@@ -108,6 +126,18 @@ class TabAdmin(MyModelAdmin):
                 f"All {total_tabs_checked} tabs have correct balances. No violations found."
             )
 
+    def negative_balances_view(self, request):
+        from django.shortcuts import render
+        negative_tabs = Tab.objects.filter(balance__lt=0).order_by('name')
+        text = '\n'.join(f"{tab.name}: {tab.balance:.2f} €" for tab in negative_tabs)
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Negative balances',
+            'negative_tabs': negative_tabs,
+            'text': text,
+        }
+        return render(request, 'admin/api/tab/negative_balances.html', context)
+
 class ProductGroupAdmin(MyModelAdmin):
     list_display = ('name', 'order',)
     search_fields = ('name',)
@@ -127,8 +157,8 @@ class ProductAdmin(MyModelAdmin):
         queryset.update(in_stock=False)
 
 class PurchaseAdmin(MyModelAdmin):
-    list_display = ('tab', 'product', 'quantity', 'total', 'created_at',)
-    list_filter = ('tab', 'product', 'created_at',)
+    list_display = ('tab', 'product', 'quantity', 'total', 'price_type', 'created_at',)
+    list_filter = ('tab', 'product', 'price_type', 'created_at',)
     search_fields = ('tab__name', 'product__name',)
     date_hierarchy = 'created_at'
 

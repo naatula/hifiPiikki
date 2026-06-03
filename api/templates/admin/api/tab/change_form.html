@@ -4,6 +4,9 @@
     {{ block.super }}
     {% if original %}
         <li>
+            <a href="{% url 'admin:api_tab_insights' original.pk %}" class="viewsitelink">Insights</a>
+        </li>
+        <li>
             <a href="{% url 'admin:api_tab_reset_pin' original.pk %}" class="historylink">Reset PIN attempts</a>
         </li>
     {% endif %}

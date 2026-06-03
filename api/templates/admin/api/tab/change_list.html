@@ -1,0 +1,9 @@
+{% extends "admin/change_list.html" %}
+{% block object-tools-items %}
+  <li>
+    <a href="{% url 'admin:api_tab_negative_balances' %}" class="viewsitelink">
+      Negative balances
+    </a>
+  </li>
+  {{ block.super }}
+{% endblock %}

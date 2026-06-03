@@ -1,0 +1,303 @@
+{% extends "admin/base_site.html" %}
+{% load static i18n %}
+
+{% block title %}Insights: {{ tab.name }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrastyle %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/insights.css' %}">
+{% endblock %}
+
+{% block extrahead %}{{ block.super }}
+<script src="{% static 'vendor/chart.umd.min.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:api_tab_changelist' %}">Tabs</a>
+  &rsaquo; <a href="{% url 'admin:api_tab_change' tab.pk %}">{{ tab.name }}</a>
+  &rsaquo; Insights
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="insights">
+  <div class="insights__head">
+    <div>
+      <h1 class="insights__title">{{ tab.name }}</h1>
+      <span class="period-badge">{{ kpis.period_label }}</span>
+    </div>
+    <div class="insights__periods">
+      {% for p in periods %}
+        <a class="period{% if p.active %} period--active{% endif %}"
+           href="?period={{ p.code }}">{{ p.label }}</a>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ---- KPI cards ---- #}
+  <div class="insights__kpis">
+    <div class="kpi {% if tab.balance < 0 %}kpi--bad{% else %}kpi--good{% endif %}">
+      <span class="kpi__value">{{ kpis.balance|floatformat:2 }} €</span>
+      <span class="kpi__label">Current balance</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.spent|floatformat:2 }} €</span>
+      <span class="kpi__label">Spent (period)</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.count }}</span>
+      <span class="kpi__label">Purchases</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.avg_purchase|floatformat:2 }} €</span>
+      <span class="kpi__label">Avg purchase</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.adjustments|floatformat:2 }} €</span>
+      <span class="kpi__label">Adjustments (period)</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.out_share|floatformat:1 }} %</span>
+      <span class="kpi__label">Out (guest) share</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.lifetime_spent|floatformat:2 }} €</span>
+      <span class="kpi__label">Lifetime spent</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.lifetime_adjustments|floatformat:2 }} €</span>
+      <span class="kpi__label">Lifetime adjustments</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.first_activity|date:"Y-m-d"|default:"—" }}</span>
+      <span class="kpi__label">First purchase</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi__value">{{ kpis.last_activity|date:"Y-m-d"|default:"—" }}</span>
+      <span class="kpi__label">Last purchase</span>
+    </div>
+  </div>
+
+  {# ---- Chart cards ---- #}
+  <div class="insights__grid">
+    <div class="card card--wide">
+      <h2>Balance over time</h2>
+      <div class="chart-box chart-box--wide"><canvas id="chartBalance"></canvas></div>
+    </div>
+    <div class="card card--wide">
+      <h2>Adjustments &amp; purchases</h2>
+      <div class="chart-box chart-box--wide"><canvas id="chartCashflow"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Top products by quantity</h2>
+      <div class="chart-box chart-box--tall"><canvas id="chartTopQty"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Top products by spend</h2>
+      <div class="chart-box chart-box--tall"><canvas id="chartTopRev"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Spending by group</h2>
+      <div class="chart-box"><canvas id="chartGroups"></canvas></div>
+    </div>
+    <div class="card card--wide">
+      <h2>In (own) vs out (guest) spending over time</h2>
+      <div class="chart-box chart-box--wide"><canvas id="chartInoutTrend"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Purchases by hour (EET/EEST)</h2>
+      <div class="chart-box"><canvas id="chartHours"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Purchases by weekday (EET/EEST)</h2>
+      <div class="chart-box"><canvas id="chartDow"></canvas></div>
+    </div>
+
+    {# ---- Session stats (sessions this tab hosted) ---- #}
+    <div class="card">
+      <h2>Sessions hosted</h2>
+      <div class="session-stats">
+        <div><b>{{ session.count }}</b><span>sessions</span></div>
+        <div><b>{{ session.people }}</b><span>people</span></div>
+        <div><b>{{ session.revenue|floatformat:2 }} €</b><span>revenue</span></div>
+        <div><b>{{ session.avg_per_session|floatformat:2 }} €</b><span>/ session</span></div>
+        <div><b>{{ session.avg_per_person|floatformat:2 }} €</b><span>/ person</span></div>
+        <div><b>{{ session.avg_hours|floatformat:1 }} h</b><span>avg duration</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{ charts|json_script:"insights-data" }}
+<script>
+(function () {
+  if (typeof Chart === "undefined") return;
+  var data = JSON.parse(document.getElementById("insights-data").textContent);
+
+  var ACCENT = "#79aec8";      // django admin blue
+  var ACCENT2 = "#417690";
+  var GOOD = "#70bf2b";
+  var BAD = "#ba2121";
+  var PALETTE = ["#79aec8", "#417690", "#70bf2b", "#efb80b", "#ba2121",
+                 "#9b59b6", "#1abc9c", "#e67e22", "#34495e", "#c0392b"];
+
+  // In (member) / out (guest) / unclassified colours, shared by every split chart.
+  var IN_COLOR = "#417690";
+  var OUT_COLOR = "#efb80b";
+  var UNKNOWN_COLOR = "#b0b0b0";
+
+  function euro(v) { return v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " €"; }
+
+  function el(id) { return document.getElementById(id); }
+
+  // Inline plugin: draw the per-bar stack total at the end of each stacked bar.
+  var stackTotalsPlugin = {
+    id: "stackTotals",
+    afterDatasetsDraw: function (chart, args, opts) {
+      var ctx = chart.ctx;
+      var horizontal = chart.options.indexAxis === "y";
+      var fmt = (opts && opts.formatter) || function (v) { return v; };
+      var meta0 = chart.getDatasetMeta(0);
+      if (!meta0 || !meta0.data) return;
+      ctx.save();
+      ctx.fillStyle = "#333";
+      ctx.font = "bold 11px sans-serif";
+      for (var i = 0; i < meta0.data.length; i++) {
+        var total = 0, hasValue = false, lastEl = null;
+        for (var d = 0; d < chart.data.datasets.length; d++) {
+          if (!chart.isDatasetVisible(d)) continue;
+          if (chart.data.datasets[d].excludeFromTotal) continue;
+          var v = chart.data.datasets[d].data[i];
+          if (v === null || v === undefined) continue;
+          total += v;
+          var elem = chart.getDatasetMeta(d).data[i];
+          if (elem) { lastEl = elem; hasValue = true; }
+        }
+        if (!hasValue || total === 0 || !lastEl) continue;
+        var text = fmt(total);
+        if (horizontal) {
+          if (lastEl.height < 12) continue;
+          ctx.textAlign = "left";
+          ctx.textBaseline = "middle";
+          ctx.fillText(text, lastEl.x + 4, lastEl.y);
+        } else {
+          if (ctx.measureText(text).width > lastEl.width) continue;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(text, lastEl.x, lastEl.y - 4);
+        }
+      }
+      ctx.restore();
+    }
+  };
+
+  // Running balance over time. Coloured fill above/below zero is not worth the
+  // complexity here; a single line that crosses zero reads fine.
+  new Chart(el("chartBalance"), {
+    type: "line",
+    data: {labels: data.balance.labels, datasets: [
+      {label: "Balance (€)", data: data.balance.values, borderColor: ACCENT2,
+       backgroundColor: ACCENT2 + "22", fill: true, tension: 0.15, pointRadius: 2}
+    ]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {legend: {display: false},
+        tooltip: {callbacks: {label: function (c) { return euro(c.parsed.y); }}}},
+      scales: {y: {title: {display: true, text: "€"},
+        grid: {color: function (c) { return c.tick.value === 0 ? "#999" : "rgba(0,0,0,0.1)"; }}}}
+    }
+  });
+
+  // Adjustments vs purchases per bucket.
+  new Chart(el("chartCashflow"), {
+    type: "bar",
+    data: {
+      labels: data.cashflow.labels,
+      datasets: [
+        {label: "Adjustments", data: data.cashflow.in, backgroundColor: GOOD},
+        {label: "Purchases", data: data.cashflow.out, backgroundColor: BAD}
+      ]
+    },
+    options: {responsive: true, maintainAspectRatio: false,
+      interaction: {mode: "index", intersect: false},
+      scales: {y: {title: {display: true, text: "€"}}},
+      plugins: {tooltip: {callbacks: {label: function (c) { return c.dataset.label + ": " + euro(c.parsed.y); }}}}}
+  });
+
+  function hbar(id, chart, color, money) {
+    new Chart(el(id), {
+      type: "bar",
+      data: {labels: chart.labels, datasets: [{data: chart.values, backgroundColor: color}]},
+      options: {
+        indexAxis: "y", responsive: true, maintainAspectRatio: false,
+        plugins: {legend: {display: false},
+          tooltip: {callbacks: {label: function (c) { return money ? euro(c.parsed.x) : c.parsed.x; }}}}
+      }
+    });
+  }
+  hbar("chartTopQty", data.top_qty, ACCENT, false);
+  hbar("chartTopRev", data.top_rev, ACCENT2, true);
+
+  // In vs out spending over time (stacked).
+  new Chart(el("chartInoutTrend"), {
+    type: "bar",
+    data: {
+      labels: data.inout_trend.labels,
+      datasets: [
+        {label: "In (€)", data: data.inout_trend.in, backgroundColor: IN_COLOR},
+        {label: "Out (€)", data: data.inout_trend.out, backgroundColor: OUT_COLOR},
+        {label: "Unclassified (€)", data: data.inout_trend.unknown, backgroundColor: UNKNOWN_COLOR}
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
+      scales: {x: {stacked: true}, y: {stacked: true, title: {display: true, text: "€"}}},
+      plugins: {
+        stackTotals: {formatter: euro},
+        tooltip: {callbacks: {label: function (c) { return c.dataset.label + ": " + euro(c.parsed.y); }}}
+      }
+    },
+    plugins: [stackTotalsPlugin]
+  });
+
+  // Spending by group (doughnut)
+  new Chart(el("chartGroups"), {
+    type: "doughnut",
+    data: {labels: data.groups.labels, datasets: [{data: data.groups.values, backgroundColor: PALETTE}]},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {position: "right"},
+      tooltip: {callbacks: {label: function (c) { return c.label + ": " + euro(c.parsed); }}}}}
+  });
+
+  // Purchase-count split into in / out / unclassified, stacked. A separate
+  // comparison bar shows the club-wide average distribution normalized to this
+  // tab's purchase count, so its height can be read against the stacked total.
+  function stackedCounts(id, chart) {
+    var datasets = [
+      {label: "In", data: chart.in, backgroundColor: IN_COLOR, stack: "actual"},
+      {label: "Out", data: chart.out, backgroundColor: OUT_COLOR, stack: "actual"},
+      {label: "Unclassified", data: chart.unknown, backgroundColor: UNKNOWN_COLOR, stack: "actual"}
+    ];
+    if (chart.avg) {
+      datasets.push({
+        label: "Normalized avg", data: chart.avg, stack: "avg",
+        excludeFromTotal: true, hidden: true,
+        backgroundColor: ACCENT + "59", borderColor: ACCENT, borderWidth: 1
+      });
+    }
+    new Chart(el(id), {
+      type: "bar",
+      data: {labels: chart.labels, datasets: datasets},
+      options: {
+        responsive: true, maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
+        scales: {x: {stacked: true}, y: {stacked: true}},
+        plugins: {stackTotals: {}}
+      },
+      plugins: [stackTotalsPlugin]
+    });
+  }
+  stackedCounts("chartHours", data.hours);
+  stackedCounts("chartDow", data.dow);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Negative balances | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:api_tab_changelist' %}">Tabs</a>
+  &rsaquo; Negative balances
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Negative balances ({{ negative_tabs|length }})</h1>
+
+{% if negative_tabs %}
+<p>All tabs with a negative balance, sorted alphabetically.</p>
+<textarea id="neg-text" readonly style="width:100%;min-height:200px;font-family:monospace;font-size:14px;padding:10px;box-sizing:border-box;">{{ text }}</textarea>
+<p>
+  <button id="copy-btn" class="button" onclick="copyText()">Copy to clipboard</button>
+  <span id="copy-status" style="margin-left:10px;color:#417690;font-weight:bold;"></span>
+</p>
+{% else %}
+<p>No tabs with a negative balance.</p>
+{% endif %}
+
+<script>
+function copyText() {
+  var ta = document.getElementById("neg-text");
+  ta.select();
+  ta.setSelectionRange(0, 99999);
+  navigator.clipboard.writeText(ta.value).then(function() {
+    document.getElementById("copy-status").textContent = "Copied!";
+  }).catch(function() {
+    document.execCommand("copy");
+    document.getElementById("copy-status").textContent = "Copied!";
+  });
+}
+</script>
+{% endblock %}
