@@ -260,7 +260,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const attempts = tab.pin_attempts || 0
         const attemptsText = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
 
-        const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'backspace', '0', 'cancel']
+        const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'cancel', '0', 'backspace']
         const keysHtml = keys.map((key) => {
             if(key === 'backspace') {
                 return `<button class="pin-key backspace" data-digit="backspace">⌫</button>`
