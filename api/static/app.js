@@ -9,6 +9,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     const tabsById = {}
     var enteredPin = ''
 
+    // Multi-tab purchase state
+    var multiTabMode = false
+    // Map<tabId, { tab: {id,name,pin_required,...}, pin: string|null }>
+    const selectedTabs = new Map()
+    var multiTabPinPendingTab = null
+
     // State for the statistics-panel PIN-required toggle (separate from the
     // checkout keypad so the two flows never interfere).
     var statisticsPinTab = null
@@ -182,12 +188,144 @@ document.addEventListener("DOMContentLoaded", async () => {
         enteredPin = ''
     }
 
+    // Clear all multi-tab selections and visual highlights.
+    const clearMultiTabState = () => {
+        selectedTabs.clear()
+        multiTabPinPendingTab = null
+        document.querySelectorAll(
+            '.checkout-panel .tab-list .tabs > div.selected, ' +
+            '.checkout-panel .tab-list .suggestions > div.selected'
+        ).forEach(el => el.classList.remove('selected'))
+    }
+
+    const renderPinpadMultiTab = (tab) => {
+        const pinpad = document.querySelector('#pinpad')
+        enteredPin = ''
+        renderPinCard(pinpad, tab, pinKeyPressedMultiTab)
+    }
+
+    const revealMultiTabPinpad = (tab) => {
+        const confirmation = document.querySelector('#confirmation')
+        if (confirmation.classList.contains('pin-mode')) return
+        multiTabPinPendingTab = tab
+        renderPinpadMultiTab(tab)
+        confirmation.classList.add('pin-mode')
+        document.querySelector('#confirmation .button').classList.add('disabled')
+        positionPinpad()
+    }
+
+    const pinKeyPressedMultiTab = (key) => {
+        if (busy) return
+        if (key === 'cancel') { cancelMultiTabPin(); return }
+        const tab = multiTabPinPendingTab
+        if (!tab || tab.pin_locked) return
+        if (key === 'backspace') {
+            enteredPin = enteredPin.slice(0, -1)
+        } else if (enteredPin.length < 6) {
+            enteredPin += key
+        }
+        document.querySelectorAll('#pinpad .pin-dot').forEach((dot, i) => {
+            dot.classList.toggle('filled', i < enteredPin.length)
+        })
+        if (enteredPin.length === 6) {
+            document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = true)
+            verifyPinForTabSelection(enteredPin)
+        }
+    }
+
+    const cancelMultiTabPin = () => {
+        hidePinpad()
+        multiTabPinPendingTab = null
+        updateConfirmation()
+    }
+
+    const verifyPinForTabSelection = async (pin) => {
+        const tab = multiTabPinPendingTab
+        if (!tab) return
+        const token = await getCsrfToken()
+        const response = await fetch(`../api/tabs/${tab.id}/verify_pin/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+            body: JSON.stringify({ pin })
+        })
+        if (response.status === 200) {
+            selectedTabs.set(tab.id, { tab, pin })
+            if (tabsById[tab.id]) tabsById[tab.id].pin_attempts = 0
+            document.querySelectorAll(
+                `.checkout-panel .tab-list .tabs > div[data-id="${tab.id}"],` +
+                `.checkout-panel .tab-list .suggestions > div[data-id="${tab.id}"]`
+            ).forEach(el => el.classList.add('selected'))
+            hidePinpad()
+            multiTabPinPendingTab = null
+            updateConfirmation()
+            return
+        }
+        let body = {}
+        try { body = await response.json() } catch(e) {}
+        enteredPin = ''
+        document.querySelectorAll('#pinpad .pin-dot').forEach(dot => dot.classList.remove('filled'))
+        document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = false)
+        const attempts = body.pin_attempts || 0
+        const attemptsEl = document.querySelector('#pinpad .pin-attempts')
+        if (attemptsEl) attemptsEl.innerHTML = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
+        if (body.pin_locked) {
+            tab.pin_locked = true
+            const lockedEl = document.querySelector('#pinpad .pin-locked')
+            if (lockedEl) lockedEl.classList.add('active')
+            const card = document.querySelector('#pinpad .pin-card')
+            if (card) card.classList.add('locked')
+        }
+        positionPinpad()
+    }
+
+    const toggleMultiTabMode = () => {
+        multiTabMode = !multiTabMode
+        document.querySelector('#multi-tab-toggle').classList.toggle('active', multiTabMode)
+        clearMultiTabState()
+        checkoutTab = null
+        updateConfirmation()
+    }
+
+    const confirmMultiTabPurchase = async () => {
+        if (busy) return
+        const items = getLineItems()
+        if (items.length === 0 || selectedTabs.size === 0) return
+        busy = true
+        const token = await getCsrfToken()
+        document.querySelector('#confirmation').classList.add('ok')
+        audio.play()
+        const tabEntries = [...selectedTabs.values()]
+        const allResponses = []
+        for (const { tab, pin } of tabEntries) {
+            const responses = await Promise.all(items.map(item => postPurchase(item, pin, token, tab)))
+            allResponses.push(...responses)
+        }
+        setTimeout(async () => {
+            if (allResponses.every(checkResponse)) {
+                busy = false
+                toMain()
+            } else {
+                busy = false
+                document.querySelector('#confirmation').classList.remove('ok')
+                const errorEl = document.querySelector('#purchase-error')
+                document.querySelector('#purchase-error .purchase-error-msg').innerHTML =
+                    'Oston kirjaaminen epäonnistui yhdelle tai useammalle piikille. Lataa sivu uudelleen, tarkista tilanne historiasta ja yritä uudestaan.'
+                errorEl.style.display = ''
+                errorEl.classList.add('active')
+            }
+        }, 500)
+    }
+
     // Click handler for the confirm button. For PIN-protected tabs the first
     // press reveals the keypad instead of completing the purchase.
     const onConfirmClick = () => {
         if(busy) return
         const button = document.querySelector('#confirmation .button')
         if(button.classList.contains('disabled')) return
+        if (multiTabMode) {
+            confirmMultiTabPurchase()
+            return
+        }
         const tab = getTab()
         if(tab !== null && tab.pin_required) {
             revealPinpad(tab)
@@ -257,6 +395,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         if(response && response.status === 200) {
             busy = true
+            hidePinpad()
             document.querySelector('#confirmation').classList.add('ok')
             audio.play()
             setTimeout(() => {
@@ -273,6 +412,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         enteredPin = ''
         document.querySelectorAll('#pinpad .pin-dot').forEach((dot) => dot.classList.remove('filled'))
+        document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = false)
         const attempts = body.pin_attempts || 0
         if(tab.pin_attempts !== undefined) tab.pin_attempts = attempts
         const attemptsElement = document.querySelector('#pinpad .pin-attempts')
@@ -312,6 +452,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         })
         if(enteredPin.length === 6) {
+            document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = true)
             submitPinPurchase(enteredPin)
         }
     }
@@ -372,27 +513,44 @@ document.addEventListener("DOMContentLoaded", async () => {
         const items = getLineItems()
         const total = items.reduce((sum, item) => sum + parseFloat(item.total), 0)
         const div = document.querySelector('#confirmation .summary')
-        const tab = getTab()
         const button = document.querySelector('#confirmation .button')
         const confirmation = document.querySelector('#confirmation')
-        if(items.length === 0 || tab === null) {
+
+        let displayName = null
+        let hasSelection = false
+
+        if (multiTabMode) {
+            const count = selectedTabs.size
+            if (count === 1) {
+                displayName = [...selectedTabs.values()][0].tab.name
+            } else if (count > 1) {
+                displayName = `${count}×`
+            }
+            hasSelection = count > 0
+        } else {
+            const tab = getTab()
+            if (tab !== null) { displayName = tab.name; hasSelection = true }
+        }
+
+        if(items.length === 0 || !hasSelection) {
             div.innerHTML = ``
             button.classList.add('disabled')
         } else {
             div.innerHTML = `
-                <div>${tab.name}</div>
+                <div>${displayName}</div>
                 <div>←</div>
                 <div>${currency(total)}</div>
             `
             button.classList.remove('disabled')
         }
 
-        // The PIN keypad is only revealed by pressing the confirm button.
-        // Any change to the tab or transaction hides it (and the "Syötä PIN"
-        // overlay) again.
-        confirmation.classList.remove('pin-mode')
-        enteredPin = ''
-
+        // The PIN keypad is only revealed by pressing the confirm button (single-tab)
+        // or by tapping a pin_required tab (multi-tab). Only reset it here for
+        // single-tab mode; multi-tab mode manages the PIN pad separately.
+        if (!multiTabMode) {
+            confirmation.classList.remove('pin-mode')
+            enteredPin = ''
+        }
     }
 
     // Markup for one quantity row: a title, optional unit price, and a stepper
@@ -424,6 +582,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             return
         }
         checkoutProduct = product
+        multiTabMode = false
+        clearMultiTabState()
+        const toggleBtnOnEntry = document.querySelector('#multi-tab-toggle')
+        if (toggleBtnOnEntry) toggleBtnOnEntry.classList.remove('active')
         element.classList.add('selected')
         const f_price_out = currency(product.price_out)
         const f_price_in = currency(product.price_in)
@@ -488,6 +650,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         }, 250)
         checkoutProduct = null
         checkoutTab = null
+        multiTabMode = false
+        clearMultiTabState()
+        const toggleBtnOnExit = document.querySelector('#multi-tab-toggle')
+        if (toggleBtnOnExit) toggleBtnOnExit.classList.remove('active')
     }
 
     const handleBackButton = () => {
@@ -503,17 +669,40 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const selectTab = (element) => {
-        document.querySelectorAll('.checkout-panel .tab-list .tabs > div, .checkout-panel .tab-list .suggestions > div').forEach((x) => x.classList.remove('selected'))
-        element.classList.add('selected')
         const id = parseInt(element.dataset.id)
-        const tab = tabsById[id]
-        checkoutTab = {
+        const tabData = tabsById[id]
+        const tabObj = {
             "id": id,
             "name": element.innerHTML,
-            "pin_required": tab ? !!tab.pin_required : false,
-            "pin_attempts": tab ? (tab.pin_attempts || 0) : 0,
-            "pin_locked": tab ? !!tab.pin_locked : false
+            "pin_required": tabData ? !!tabData.pin_required : false,
+            "pin_attempts": tabData ? (tabData.pin_attempts || 0) : 0,
+            "pin_locked": tabData ? !!tabData.pin_locked : false
         }
+
+        if (!multiTabMode) {
+            document.querySelectorAll('.checkout-panel .tab-list .tabs > div, .checkout-panel .tab-list .suggestions > div').forEach((x) => x.classList.remove('selected'))
+            element.classList.add('selected')
+            checkoutTab = tabObj
+            updateConfirmation()
+            return
+        }
+
+        if (multiTabPinPendingTab !== null) cancelMultiTabPin()
+
+        if (selectedTabs.has(id)) {
+            selectedTabs.delete(id)
+            element.classList.remove('selected')
+            updateConfirmation()
+            return
+        }
+
+        if (tabObj.pin_required) {
+            revealMultiTabPinpad(tabObj)
+            return
+        }
+
+        selectedTabs.set(id, { tab: tabObj, pin: null })
+        element.classList.add('selected')
         updateConfirmation()
     }
 
@@ -969,6 +1158,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         })
         if(statisticsEnteredPin.length === 6) {
+            document.querySelectorAll('#statistics-pinpad .pin-key').forEach(btn => btn.disabled = true)
             submitStatisticsPin(statisticsEnteredPin)
         }
     }
@@ -1005,6 +1195,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         statisticsEnteredPin = ''
         document.querySelectorAll('#statistics-pinpad .pin-dot').forEach((dot) => dot.classList.remove('filled'))
+        document.querySelectorAll('#statistics-pinpad .pin-key').forEach(btn => btn.disabled = false)
         const attempts = body.pin_attempts || 0
         tab.pin_attempts = attempts
         const attemptsElement = document.querySelector('#statistics-pinpad .pin-attempts')
@@ -1061,6 +1252,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     document.querySelector('#confirmation .button').addEventListener('click', onConfirmClick)
     document.querySelector('.checkout-panel .back').addEventListener('click', handleBackButton)
+    document.querySelector('#multi-tab-toggle').addEventListener('click', toggleMultiTabMode)
 
     document.querySelector('#login').addEventListener('click', handleLogin)
 

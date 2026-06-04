@@ -124,6 +124,32 @@ class TabViewSet(viewsets.ReadOnlyModelViewSet):
         tab.save()
         return Response(TabSerializer(tab).data)
 
+    @action(detail=True, methods=['post'])
+    def verify_pin(self, request, pk=None):
+        """Verify the PIN for a tab without creating a purchase or changing any setting.
+        Increments pin_attempts on failure (brute-force protection) and resets on success."""
+        tab = self.get_object()
+        if not tab.pin:
+            return Response({'error': 'no_pin'}, status=400)
+        threshold = get_pin_lockout_threshold()
+        if is_tab_locked(tab, threshold):
+            return Response(
+                {'error': 'locked', 'pin_attempts': tab.pin_attempts, 'pin_locked': True},
+                status=403,
+            )
+        pin = request.data.get('pin')
+        if pin != tab.pin:
+            tab.pin_attempts += 1
+            tab.save()
+            return Response(
+                {'error': 'wrong_pin', 'pin_attempts': tab.pin_attempts,
+                 'pin_locked': is_tab_locked(tab, threshold)},
+                status=403,
+            )
+        tab.pin_attempts = 0
+        tab.save()
+        return Response({'ok': True})
+
     @action(detail=False, methods=['get'])
     def all(self, request):
         """List all tabs (including inactive ones with nonzero balance) with their balances"""
