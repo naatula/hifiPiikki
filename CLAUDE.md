@@ -20,7 +20,9 @@ python manage.py runserver
 - Frontend SPA in Django debug mode: `http://localhost:8000/static/index.html` (not the root `/`)
 - Admin panel: `http://localhost:8000/admin/`
 
-## Deploy
+No need to run collectstatic in dev — static files are served directly from the app.
+
+## Production deploy
 
 After each deploy, run before restarting the app server:
 
