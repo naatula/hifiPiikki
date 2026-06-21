@@ -1165,8 +1165,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         document.querySelector('#statistics-tab-name').textContent = tab.name
         document.querySelector('#statistics-tab-status').innerHTML = tab.active
-        ? '<span class="active-status">Aktiivinen</span>'
-        : '<span class="inactive-status">Ei aktiivinen</span>'
+        ? '<span class="active-status">Käytössä</span>'
+        : '<span class="inactive-status">Poistettu käytöstä</span>'
         document.querySelector('#statistics-tab-balance').innerHTML = currency(tab.balance)
 
         // Update tab adjustment info
