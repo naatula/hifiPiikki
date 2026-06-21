@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     var checkoutTab = null
     var activeHost = null
     var busy = false
+    var csrftoken = null
 
     const tabsById = {}
     var enteredPin = ''
@@ -833,9 +834,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         return true
     }
 
-    const getCsrfToken = () => {
-        const cookie = document.cookie.split('; ').find(c => c.startsWith('csrftoken='))
-        return cookie ? cookie.slice('csrftoken='.length) : null
+    const getCsrfToken = async () => {
+        // CSRF_USE_SESSIONS=True stores the token in the session, not a cookie,
+        // so there is no csrftoken cookie to read. The token is only exposed by a
+        // Django view that emits it; /api/csrf/ renders {% csrf_token %} for that.
+        // Cache it to avoid a roundtrip on every write; reset on login (token rotates).
+        if(csrftoken !== null) return csrftoken
+        const response = await fetch('../api/csrf/', { method: 'GET' })
+        if(response.status === 200) {
+            const body = await response.text()
+            csrftoken = body.split('value="')[1].split('"')[0]
+        }
+        return csrftoken
     }
 
 
@@ -855,6 +865,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             },
             body: formData
         }).then(async (response) => {
+            // Django rotates the session CSRF token on login, so drop the cached one.
+            csrftoken = null
             if(await fetchProducts()) {
                 errorField.innerHTML = ''
                 document.querySelector('.login-panel').classList.remove('active')
