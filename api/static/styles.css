@@ -1548,7 +1548,6 @@ footer {
 
 #offline-sync {
     background-color: var(--green);
-    font-weight: 600;
 }
 
 /* PIN-disabled tabs in offline mode */
