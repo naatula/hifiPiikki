@@ -16,7 +16,7 @@ class MyModelAdmin(ParanoidAdmin):
 
 class TabAdmin(MyModelAdmin):
     list_display = ('name', 'balance', 'active', 'pin_required', 'pin_attempts',)
-    list_filter = ('pin_required',)
+    list_filter = ('active', 'pin_required',)
     ordering = ('name',)
     actions = ['validate_tabs', 'recalculate_balances', 'activate_tabs', 'deactivate_tabs', 'reset_pin_attempts']
     change_list_template = 'admin/api/tab/change_list.html'
