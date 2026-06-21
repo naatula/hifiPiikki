@@ -4,7 +4,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     var checkoutTab = null
     var activeHost = null
     var busy = false
-    var csrftoken = null
 
     const tabsById = {}
     var enteredPin = ''
@@ -831,20 +830,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         return true
     }
 
-    const getCsrfToken = async () => {
-        // Get token from ../api/csrf/ endpoint to use in requests as required by Django
-        // Sort of unsafe, but it's fine for this project
-        const response = await fetch('../api/csrf/', {
-            method: 'GET'
-        })
-
-        if(response.status === 200) {
-            const body = await response.text()
-            const token = body.split('value="')[1].split('"')[0]
-            return token
-        }
-        return null
-    }
+    const getCsrfToken = () =>
+        document.cookie.split('; ').find(c => c.startsWith('csrftoken='))?.split('=')[1] ?? null
 
 
     const handleLogin = async () => {
