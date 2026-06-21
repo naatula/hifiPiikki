@@ -33,6 +33,8 @@ Kopioi `.env.example` tiedostoksi `.env` ja käynnistä Djangon kehityspalvelin:
 
 Vaihda IP (127.0.0.1:9000) tarpeen mukaan
 
+Kun selainpuolen tiedostot (esim. `app.js`, `offline.js`, `styles.css` tai `index.html`) muuttuvat, kasvata service workerin `CACHE_VERSION`-vakiota tiedostossa `api/static/sw.js`. Muuten käyttäjien laitteet jatkavat vanhojen, välimuistissa olevien tiedostojen käyttöä. Versionumeron muuttuessa sovellus näyttää "Uusi versio saatavilla" -ilmoituksen.
+
 ## Käyttö
 
 Sovellusta käytetään käyttäjänäkymän kautta yhteisellä laitteella, kuten tabletilla. Yhteislaitteella on oma käyttäjätunnus (User), jonka kautta voidaan kirjata myynnit ja kerhotilan käyttökirjaukset mille tahansa käyttäjälle (Tab). Tarkoituksena on, että yhteislaitteella ei kirjauduta ulos käyttökertojen välissä, vaan kirjautuminen säilyy evästeessä nopean käytön mahdollistamiseksi.
@@ -40,6 +42,19 @@ Sovellusta käytetään käyttäjänäkymän kautta yhteisellä laitteella, kute
 Ylläpitäjä voi omalla tunnuksellaan hallintanäkymästä tarkastella myyntejä, kerhotilan käyttöä ja hallinnoida tuotteita, käyttäjiä ja tilitietoja. Tab adjustments -sivulta voidaan nostaa tai laskea halutun käyttäjän piikin saldoa.
 
 Järjestelmä on suunniteltu siten, että kaikki tilisaldon muutokset ovat jäljitettävissä tapahtumaan, jolloin pystytään seuraamaan käyttäjien piikkien saldojen historiallisia muutoksia jälkikäteen.
+
+## Offline-tila
+
+Käyttäjänäkymä on progressiivinen web-sovellus (PWA), joka toimii myös ilman jatkuvaa verkkoyhteyttä.
+
+- **Puskurointi:** Offline-tilassa ostot sekä hostauksen aloitus ja lopetus tallentuvat selaimen `localStorage`-jonoon ja synkronoidaan palvelimelle, kun yhteys palaa. Tuote- ja piikkilistat sekä aktiivinen hostaus näytetään välimuistista.
+- **Offline-painike:** Yhteyden katketessa tilastopainike korvautuu punaisella offline-painikkeella. Painike avaa paneelin, jossa näkyvät jonossa olevat toiminnot, viimeisin palvelinyhteys ja "Synkronoi"-painike.
+- **Pysyvyys:** Offline-tila pysyy päällä, kunnes kaikki jonossa olevat toiminnot on synkronoitu — myös sivun uudelleenlatauksen yli. Yhteys tarkistetaan taustalla ja synkronointi käynnistyy automaattisesti yhteyden palatessa; lisäksi sen voi käynnistää käsin.
+- **Idempotenssi:** Jokainen puskuroitu toiminto saa oman `client_uuid`-tunnisteen, joten palvelin ei kirjaa samaa ostoa tai hostausta kahdesti, vaikka synkronointi yritettäisiin uudelleen.
+- **Aikaleimat:** Ostot kirjataan todelliseen tapahtuma-aikaan (`occurred_at`), ei synkronointihetkeen, jotta tilastot ja suositukset pysyvät oikein. `created_at` säilyy palvelimen kirjaushetkenä.
+- **Rajoitukset offline-tilassa:** PIN-suojattuja piikkejä ei voi käyttää (PIN tarkistetaan vain palvelimella) eikä tilastonäkymää voi avata. Shelly-laitetta ei ohjata jälkikäteen synkronoiduista hostauksista.
+- **Epäonnistuneet synkronoinnit:** Palvelimen hylkäämät (4xx) toiminnot merkitään virheellisiksi ja ne voi poistaa jonosta yksitellen; tilapäiset verkkovirheet yritetään automaattisesti uudelleen.
+- **Service worker:** `api/static/sw.js` tarjoilee sovelluksen myös offline-tilassa ja huolehtii automaattisista päivityksistä (ks. `CACHE_VERSION` yllä).
 
 ### Settings
 

@@ -1,6 +1,8 @@
+import uuid
 from django.db import models
 from django.core.validators import RegexValidator
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from django_paranoid.models import ParanoidModel
 
 
@@ -71,11 +73,10 @@ class Purchase(ParanoidModel):
     product = models.ForeignKey(Product, on_delete=models.PROTECT, null=True)
     quantity = models.DecimalField(max_digits=10, decimal_places=2)
     total = models.DecimalField(max_digits=10, decimal_places=2)
-    # Whether the in (member) or out (guest) price was charged. Empty when the
-    # product has a single price, for custom amounts, or when it can't be told
-    # apart (e.g. backfilled rows whose product price has since changed).
     price_type = models.CharField(
         max_length=3, choices=PRICE_TYPE_CHOICES, null=True, blank=True)
+    client_uuid = models.UUIDField(null=True, blank=True, unique=True)
+    occurred_at = models.DateTimeField(default=timezone.now)
 
 class Setting(ParanoidModel):
     key = models.CharField(max_length=255, primary_key=True)
@@ -87,6 +88,7 @@ class Session(ParanoidModel):
     comment = models.TextField(blank=True, default='')
     started_at = models.DateTimeField()
     ended_at = models.DateTimeField(default=None, null=True, blank=True)
+    client_uuid = models.UUIDField(null=True, blank=True, unique=True)
 
 class TabAdjustment(ParanoidModel):
     tab = models.ForeignKey(Tab, on_delete=models.PROTECT, related_name='tab_adjustments')

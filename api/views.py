@@ -1,13 +1,14 @@
 from django.http import HttpResponse
-from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked
+from django.db import IntegrityError, models
+from django.shortcuts import render
+from django.utils import timezone
 from rest_framework import permissions, viewsets, serializers
-from .serializers import PurchaseSerializer, TabSerializer, ProductSerializer, ProductGroupSerializer, SessionSerializer
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from datetime import datetime, timedelta
-from django.db import models
-from django.shortcuts import render
-from django.utils import timezone
+
+from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked
+from .serializers import PurchaseSerializer, TabSerializer, ProductSerializer, ProductGroupSerializer, SessionSerializer
 from .shelly import turn_on_shelly, schedule_turn_off_shelly
 
 
@@ -16,10 +17,14 @@ class PurchaseViewSet(viewsets.GenericViewSet):
     serializer_class = PurchaseSerializer
     permission_classes = [permissions.IsAuthenticated]
     def create(self, request):
+        client_uuid = request.data.get('client_uuid')
+        if client_uuid:
+            existing = Purchase.objects.filter(client_uuid=client_uuid).first()
+            if existing:
+                return Response(PurchaseSerializer(existing).data)
         serializer = PurchaseSerializer(data=request.data)
         if serializer.is_valid():
             tab = serializer.validated_data['tab']
-            # PIN protection: verify before creating the purchase
             if tab.pin_required:
                 threshold = get_pin_lockout_threshold()
                 if is_tab_locked(tab, threshold):
@@ -36,19 +41,22 @@ class PurchaseViewSet(viewsets.GenericViewSet):
                          'pin_locked': is_tab_locked(tab, threshold)},
                         status=403,
                     )
-                # Correct PIN: reset the attempt counter
                 tab.pin_attempts = 0
-            serializer.save()
-            # Update the tab balance
+            try:
+                serializer.save()
+            except IntegrityError:
+                existing = Purchase.objects.filter(client_uuid=client_uuid).first()
+                if existing:
+                    return Response(PurchaseSerializer(existing).data)
+                raise
             tab.balance -= serializer.validated_data['total']
             tab.save()
             return Response(serializer.data)
         return Response(serializer.errors)
-    # List should return the purchases from the last 24 hours
     def list(self, request):
         return Response(PurchaseSerializer(
             Purchase.objects.filter(
-                created_at__gte=timezone.now()-timedelta(days=1)), many=True).data)
+                occurred_at__gte=timezone.now()-timedelta(days=1)), many=True).data)
 
 class TabViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Tab.objects.all().order_by('name')
@@ -66,8 +74,7 @@ class TabViewSet(viewsets.ReadOnlyModelViewSet):
         tab = self.get_object()
         serializer = TabSerializer(tab)
         data = serializer.data
-        # Add latest 50 purchases for this tab (max 7 days old)
-        purchases = Purchase.objects.filter(tab=tab, created_at__gte=timezone.now()-timedelta(days=7)).order_by('-created_at')[:50]
+        purchases = Purchase.objects.filter(tab=tab, occurred_at__gte=timezone.now()-timedelta(days=7)).order_by('-occurred_at')[:50]
         purchases_data = PurchaseSerializer(purchases, many=True).data
         # Add product name to each purchase
         for i, purchase in enumerate(purchases):
@@ -179,12 +186,10 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     def list(self, request):
         queryset = ProductGroup.objects.all().order_by('order')
         serializer = ProductGroupSerializer(queryset, many=True)
-        # Recommend 6 of the most sold products within the last 90 days
-        recommendations = list(Purchase.objects.filter(product__isnull=False, created_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6])
-        # If there is an active session, add 6 most sold products to the host within the last 90 days
+        recommendations = list(Purchase.objects.filter(product__isnull=False, occurred_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6])
         session = Session.objects.filter(ended_at=None).first()
         if session is not None:
-            recommendations = list(Purchase.objects.filter(tab=session.tab, created_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6]) + recommendations
+            recommendations = list(Purchase.objects.filter(tab=session.tab, occurred_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6]) + recommendations
         # Remove duplicates
         recommendations = list({v['product']:v for v in recommendations}.values())
         # Add the recommendations to the response
@@ -218,45 +223,52 @@ class SessionViewSet(viewsets.GenericViewSet):
         serializer = SessionSerializer(queryset, many=True)
         return Response(serializer.data)
 
-    # Create should create a new session with the tab from the request
     def create(self, request):
-        # Fail if there is already an active session
-        if Session.objects.filter(ended_at=None).exists():
+        client_uuid = request.data.get('client_uuid')
+        if client_uuid:
+            existing = Session.objects.filter(client_uuid=client_uuid).first()
+            if existing:
+                return Response(SessionSerializer(existing).data)
+        ended_at = request.data.get('ended_at')
+        if not ended_at and Session.objects.filter(ended_at=None).exists():
             return Response({'error': 'An active session already exists'}, status=400)
-        # Create new session object with tab from request
-        serializer = SessionSerializer(data = {
+        serializer = SessionSerializer(data={
             'tab': request.data['tab'],
-            'people': None,
-            'comment': '',
-            'started_at': timezone.now(),
-            'ended_at': None
+            'people': request.data.get('people'),
+            'comment': request.data.get('comment', ''),
+            'started_at': request.data.get('started_at', timezone.now()),
+            'ended_at': ended_at,
+            'client_uuid': client_uuid,
         })
         if serializer.is_valid():
-            serializer.save()
-            # Turn on the Shelly device and cancel any existing timers
-            turn_on_shelly()
+            try:
+                serializer.save()
+            except IntegrityError:
+                existing = Session.objects.filter(client_uuid=client_uuid).first()
+                if existing:
+                    return Response(SessionSerializer(existing).data)
+                raise
+            if not client_uuid:
+                turn_on_shelly()
             return Response(serializer.data)
         return Response(serializer.errors)
-
 
     @action(detail=True, methods=['post'])
     def end(self, request, pk=None):
         session = self.get_object()
-        # Add people and comment to the session
-        session = self.get_object()
+        if session.ended_at is not None:
+            return Response(SessionSerializer(session).data)
         session.people = request.data.get('people')
         session.comment = request.data.get('comment')
-        # Fail if the session has already ended
-        if session.ended_at is not None:
-            return Response({'error': 'Session has already ended'}, status=400)
-        if session.people == None or session.people == 0:
+        if session.people is None or session.people == 0:
             return Response({'error': 'Number of people is required'}, status=400)
-        if session.comment == None or session.comment == '':
+        if session.comment is None or session.comment == '':
             return Response({'error': 'Comment is required'}, status=400)
-        session.ended_at = timezone.now()
+        session.ended_at = request.data.get('ended_at', timezone.now())
         session.save()
-        # Schedule the Shelly device to turn off in 1 minute
-        schedule_turn_off_shelly(60)
+        is_replay = request.data.get('client_uuid')
+        if not is_replay:
+            schedule_turn_off_shelly(60)
         return Response(SessionSerializer(session).data)
 
     @action(detail=False, methods=['get'])
@@ -267,8 +279,8 @@ class SessionViewSet(viewsets.GenericViewSet):
         serializer = SessionSerializer(queryset, many=False)
         # Add total purchases after the session started
         data = serializer.data
-        data['total_host'] = Purchase.objects.filter(tab=queryset.tab, created_at__gte=queryset.started_at).aggregate(models.Sum('total'))['total__sum'] or 0
-        data['total_all'] = Purchase.objects.filter(created_at__gte=queryset.started_at).aggregate(models.Sum('total'))['total__sum'] or 0
+        data['total_host'] = Purchase.objects.filter(tab=queryset.tab, occurred_at__gte=queryset.started_at).aggregate(models.Sum('total'))['total__sum'] or 0
+        data['total_all'] = Purchase.objects.filter(occurred_at__gte=queryset.started_at).aggregate(models.Sum('total'))['total__sum'] or 0
         return Response(data)
 
 

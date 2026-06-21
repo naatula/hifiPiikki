@@ -66,12 +66,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         return diffInYears === 1 ? '1 vuosi sitten' : `${diffInYears} vuotta sitten`
     }
 
-    const checkResponse = (response) => {
-        if(response.status !== 200) {
-            return false
-        }
-        return true
-    }
+    const checkResponse = (response) => response.ok
 
     // Read a quantity input as a non-negative decimal count (0.01 precision, 0–99.99).
     const readCount = (input) => {
@@ -239,6 +234,24 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateConfirmation()
     }
 
+    // Apply wrong-PIN / lockout feedback to any pin card. Updates the tab object
+    // in place and reflects attempt count + locked state in the DOM.
+    const applyPinError = (pinpadSelector, tab, body) => {
+        const attempts = body.pin_attempts || 0
+        tab.pin_attempts = attempts
+        document.querySelectorAll(`${pinpadSelector} .pin-dot`).forEach(dot => dot.classList.remove('filled'))
+        document.querySelectorAll(`${pinpadSelector} .pin-key`).forEach(btn => btn.disabled = false)
+        const attemptsEl = document.querySelector(`${pinpadSelector} .pin-attempts`)
+        if(attemptsEl) attemptsEl.textContent = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
+        if(body.pin_locked) {
+            tab.pin_locked = true
+            const lockedEl = document.querySelector(`${pinpadSelector} .pin-locked`)
+            if(lockedEl) lockedEl.classList.add('active')
+            const card = document.querySelector(`${pinpadSelector} .pin-card`)
+            if(card) card.classList.add('locked')
+        }
+    }
+
     const verifyPinForTabSelection = async (pin) => {
         const tab = multiTabPinPendingTab
         if (!tab) return
@@ -263,18 +276,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         let body = {}
         try { body = await response.json() } catch(e) {}
         enteredPin = ''
-        document.querySelectorAll('#pinpad .pin-dot').forEach(dot => dot.classList.remove('filled'))
-        document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = false)
-        const attempts = body.pin_attempts || 0
-        const attemptsEl = document.querySelector('#pinpad .pin-attempts')
-        if (attemptsEl) attemptsEl.innerHTML = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
-        if (body.pin_locked) {
-            tab.pin_locked = true
-            const lockedEl = document.querySelector('#pinpad .pin-locked')
-            if (lockedEl) lockedEl.classList.add('active')
-            const card = document.querySelector('#pinpad .pin-card')
-            if (card) card.classList.add('locked')
-        }
+        applyPinError('#pinpad', tab, body)
         positionPinpad()
     }
 
@@ -291,14 +293,43 @@ document.addEventListener("DOMContentLoaded", async () => {
         const items = getLineItems()
         if (items.length === 0 || selectedTabs.size === 0) return
         busy = true
+
+        if (PiikkiOffline.isOffline()) {
+            for (const { tab } of selectedTabs.values()) {
+                enqueuePurchaseItems(items, tab)
+            }
+            document.querySelector('#confirmation').classList.add('ok')
+            audio.play()
+            setTimeout(() => { busy = false; toMain() }, 500)
+            return
+        }
+
         const token = await getCsrfToken()
+        if (!token) {
+            for (const { tab } of selectedTabs.values()) {
+                enqueuePurchaseItems(items, tab)
+            }
+            document.querySelector('#confirmation').classList.add('ok')
+            audio.play()
+            setTimeout(() => { busy = false; toMain() }, 500)
+            return
+        }
         document.querySelector('#confirmation').classList.add('ok')
         audio.play()
         const tabEntries = [...selectedTabs.values()]
         const allResponses = []
-        for (const { tab, pin } of tabEntries) {
-            const responses = await Promise.all(items.map(item => postPurchase(item, pin, token, tab)))
-            allResponses.push(...responses)
+        try {
+            for (const { tab, pin } of tabEntries) {
+                const responses = await Promise.all(items.map(item => postPurchase(item, pin, token, tab)))
+                allResponses.push(...responses)
+            }
+        } catch {
+            for (const { tab } of tabEntries) {
+                enqueuePurchaseItems(items, tab)
+            }
+            busy = false
+            toMain()
+            return
         }
         setTimeout(async () => {
             if (allResponses.every(checkResponse)) {
@@ -354,28 +385,60 @@ document.addEventListener("DOMContentLoaded", async () => {
         })
     }
 
+    const enqueuePurchaseItems = (items, tab) => {
+        const productName = checkoutProduct ? checkoutProduct.name : 'Oma summa'
+        items.forEach(item => {
+            PiikkiOffline.enqueue(PiikkiOffline.makePurchaseItem(
+                { tab: tab.id, quantity: item.quantity, total: item.total, product: checkoutProduct?.id, price_type: item.price_type || null },
+                productName, tab.name
+            ))
+        })
+    }
+
     const confirmPurchase = async () => {
         if(busy) return
         const items = getLineItems()
         const tab = getTab()
         if(items.length === 0 || tab === null) return
         busy = true
+
+        if (PiikkiOffline.isOffline()) {
+            enqueuePurchaseItems(items, tab)
+            document.querySelector('#confirmation').classList.add('ok')
+            audio.play()
+            setTimeout(() => { busy = false; toMain() }, 500)
+            return
+        }
+
         const token = await getCsrfToken()
+        if (!token) {
+            enqueuePurchaseItems(items, tab)
+            document.querySelector('#confirmation').classList.add('ok')
+            audio.play()
+            setTimeout(() => { busy = false; toMain() }, 500)
+            return
+        }
         const requests = items.map((item) => postPurchase(item, null, token, tab))
         document.querySelector('#confirmation').classList.add('ok')
         audio.play()
         setTimeout( async () => {
-            const responses = await Promise.all(requests)
-            if(responses.every(checkResponse)) {
+            try {
+                const responses = await Promise.all(requests)
+                if(responses.every(checkResponse)) {
+                    busy = false
+                    toMain()
+                } else {
+                    busy = false
+                    document.querySelector('#confirmation').classList.remove('ok')
+                    const errorEl = document.querySelector('#purchase-error')
+                    document.querySelector('#purchase-error .purchase-error-msg').innerHTML = 'Oston kirjaaminen epäonnistui. Lataa sivu uudelleen ja yritä uudestaan.'
+                    errorEl.style.display = ''
+                    errorEl.classList.add('active')
+                }
+            } catch {
+                enqueuePurchaseItems(items, tab)
                 busy = false
                 toMain()
-            } else {
-                busy = false
-                document.querySelector('#confirmation').classList.remove('ok')
-                const errorEl = document.querySelector('#purchase-error')
-                document.querySelector('#purchase-error .purchase-error-msg').innerHTML = 'Oston kirjaaminen epäonnistui. Lataa sivu uudelleen ja yritä uudestaan.'
-                errorEl.style.display = ''
-                errorEl.classList.add('active')
             }
         }, 500)
     }
@@ -411,21 +474,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             body = {}
         }
         enteredPin = ''
-        document.querySelectorAll('#pinpad .pin-dot').forEach((dot) => dot.classList.remove('filled'))
-        document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = false)
-        const attempts = body.pin_attempts || 0
-        if(tab.pin_attempts !== undefined) tab.pin_attempts = attempts
-        const attemptsElement = document.querySelector('#pinpad .pin-attempts')
-        if(attemptsElement) {
-            attemptsElement.innerHTML = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
-        }
-        if(body.pin_locked) {
-            if(tab.pin_locked !== undefined) tab.pin_locked = true
-            const lockedElement = document.querySelector('#pinpad .pin-locked')
-            if(lockedElement) lockedElement.classList.add('active')
-            const card = document.querySelector('#pinpad .pin-card')
-            if(card) card.classList.add('locked')
-        }
+        applyPinError('#pinpad', tab, body)
         // The attempts / locked message changes the card height; re-anchor it
         // above the confirm button so it stays put.
         positionPinpad()
@@ -536,11 +585,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             div.innerHTML = ``
             button.classList.add('disabled')
         } else {
-            div.innerHTML = `
-                <div>${displayName}</div>
-                <div>←</div>
-                <div>${currency(total)}</div>
-            `
+            div.innerHTML = ''
+            const nameDiv = document.createElement('div')
+            nameDiv.textContent = displayName
+            const arrowDiv = document.createElement('div')
+            arrowDiv.textContent = '←'
+            const totalDiv = document.createElement('div')
+            totalDiv.textContent = currency(total)
+            div.append(nameDiv, arrowDiv, totalDiv)
             button.classList.remove('disabled')
         }
 
@@ -591,9 +643,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         const f_price_in = currency(product.price_in)
         const fetchTabsPromise = fetchTabs()
         const descriptionElement = document.querySelector('#checkout-description')
-        document.querySelector('#checkout-title').innerHTML = product.name
+        document.querySelector('#checkout-title').textContent = product.name
         if(product.note || product.description) {
-            descriptionElement.innerHTML = `<h2>${product.note || ''}</h2><p>${product.description || ''}</p>`
+            const noteH2 = document.createElement('h2')
+            noteH2.textContent = product.note || ''
+            const descP = document.createElement('p')
+            descP.textContent = product.description || ''
+            descriptionElement.innerHTML = ''
+            descriptionElement.append(noteH2, descP)
             descriptionElement.style = 'display: block'
         } else {
             descriptionElement.style = 'display: none'
@@ -673,11 +730,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         const tabData = tabsById[id]
         const tabObj = {
             "id": id,
-            "name": element.innerHTML,
+            "name": element.textContent,
             "pin_required": tabData ? !!tabData.pin_required : false,
             "pin_attempts": tabData ? (tabData.pin_attempts || 0) : 0,
             "pin_locked": tabData ? !!tabData.pin_locked : false
         }
+
+        if (PiikkiOffline.isOffline() && tabObj.pin_required) return
 
         if (!multiTabMode) {
             document.querySelectorAll('.checkout-panel .tab-list .tabs > div, .checkout-panel .tab-list .suggestions > div').forEach((x) => x.classList.remove('selected'))
@@ -712,14 +771,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelector('#session-confirm').classList.remove('disabled')
     }
 
-    const fetchTabs = async () => {
-
-        const response = await fetch('../api/tabs/')
-        if(!checkResponse(response)) {
-            toLogin()
-            return false
-        }
-        const tabs = await response.json()
+    const renderTabs = (tabs) => {
         const alphabetContainer = document.querySelector('.checkout-panel .alphabet')
         const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ"
 
@@ -733,16 +785,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         tabs.forEach((x) => {
             const element = document.createElement('div')
             element.dataset.id = x.id
-            element.innerHTML = x.name
+            element.textContent = x.name
+            if (PiikkiOffline.isOffline() && x.pin_required) element.classList.add('pin-disabled')
             document.querySelector('.checkout-panel .tab-list .tabs').appendChild(element)
-            document.querySelector('#session-tab-list').appendChild(element.cloneNode(true))
             element.addEventListener('click', () => selectTab(element))
         })
-        // Add most recently used (updated_at) tabs to suggestions
         tabs.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)).slice(0, 6).forEach((x) => {
             const element = document.createElement('div')
             element.dataset.id = x.id
-            element.innerHTML = x.name
+            element.textContent = x.name
+            if (PiikkiOffline.isOffline() && x.pin_required) element.classList.add('pin-disabled')
             document.querySelector('.checkout-panel .tab-list .suggestions').appendChild(element)
             element.addEventListener('click', () => selectTab(element))
         })
@@ -752,7 +804,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                 element.classList.add('disabled')
             } else {
                 element.addEventListener('click', () => {
-                    // Find first tab with the correct letter and scroll into view
                     const matches = Array.from(document.querySelectorAll('.checkout-panel .tab-list .tabs > div')).filter((y) => y.innerHTML[0].toUpperCase() === x)
                     const first = matches[0]
                     if(first) first.scrollIntoView()
@@ -762,8 +813,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             element.innerHTML = x
             alphabetContainer.appendChild(element)
         })
-        // Clone tab list to session window
         document.querySelector('#session-tab-list').innerHTML = document.querySelector('.checkout-panel .tab-list').innerHTML
+        document.querySelectorAll('#session-tab-list .pin-disabled').forEach(el => el.classList.remove('pin-disabled'))
         document.querySelectorAll('#session-tab-list .suggestions > div, #session-tab-list .tabs > div').forEach((x) => {
             x.addEventListener('click', () => selectSessionTab(x))
         })
@@ -775,19 +826,27 @@ document.addEventListener("DOMContentLoaded", async () => {
                 matches.forEach((y) => blink(y))
             })
         })
-        return true
     }
 
-    const fetchProducts = async () => {
-        const response = await fetch('../api/products/')
+    const fetchTabs = async () => {
+        const { offline, response } = await PiikkiOffline.apiFetch('../api/tabs/')
+        if (offline) {
+            const cached = PiikkiOffline.getCache('tabs')
+            if (cached) { renderTabs(cached); return true }
+            return false
+        }
         if(!checkResponse(response)) {
             toLogin()
             return false
         }
-        const products = await response.json()
+        const tabs = await response.json()
+        PiikkiOffline.setCache('tabs', tabs)
+        renderTabs(tabs)
+        return true
+    }
 
+    const renderProducts = (products) => {
         document.querySelector('.product-column').innerHTML = ''
-
         document.querySelector('.navigation').innerHTML = document.querySelector('.navigation').firstElementChild.outerHTML
         products.forEach(group => {
             if(group.products.filter((x) => x.in_stock).length === 0) return
@@ -795,7 +854,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             div.id = `category-${group.id}`
             div.classList.add('category')
             const title = document.createElement('h2')
-            title.innerHTML = group.name
+            title.textContent = group.name
             div.appendChild(title)
 
             const productsDiv = document.createElement('div')
@@ -806,9 +865,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const productDiv = document.createElement('div')
                 productDiv.id = `product-${product.id}`
                 const price = product.price_out === product.price_in ? `${product.price_out.replace(".",",")} €` : `${product.price_in.replace(".",",")} € / ${product.price_out.replace(".",",")} €`
-                productDiv.innerHTML =
-                `<h3>${product.name}</h3>
-                <div><span class="note">${product.note || ''}</span><span class="price">${price}</span>`
+                const h3 = document.createElement('h3')
+                h3.textContent = product.name
+                const infoDiv = document.createElement('div')
+                const noteSpan = document.createElement('span')
+                noteSpan.className = 'note'
+                noteSpan.textContent = product.note || ''
+                const priceSpan = document.createElement('span')
+                priceSpan.className = 'price'
+                priceSpan.textContent = price
+                infoDiv.append(noteSpan, priceSpan)
+                productDiv.append(h3, infoDiv)
                 productsDiv.appendChild(productDiv)
 
                 productDiv.addEventListener('click', () => {
@@ -820,7 +887,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const a = document.createElement('a')
             a.href = `#category-${group.id}`
             a.dataset.id = group.id
-            a.innerHTML = group.name
+            a.textContent = group.name
             document.querySelector('.navigation').appendChild(a)
         })
         // Add footer to product list
@@ -828,22 +895,34 @@ document.addEventListener("DOMContentLoaded", async () => {
         footer.textContent = 'hifiPiikki — Simo Naatula — 2026'
         document.querySelector('.product-column').appendChild(footer)
         updateMarker()
+    }
+
+    const fetchProducts = async () => {
+        const { offline, response } = await PiikkiOffline.apiFetch('../api/products/')
+        if (offline) {
+            const cached = PiikkiOffline.getCache('products')
+            if (cached) { renderProducts(cached); return true }
+            return false
+        }
+        if(!checkResponse(response)) {
+            toLogin()
+            return false
+        }
+        const products = await response.json()
+        PiikkiOffline.setCache('products', products)
+        renderProducts(products)
         return true
     }
 
     const getCsrfToken = async () => {
-        // Get token from ../api/csrf/ endpoint to use in requests as required by Django
-        // Sort of unsafe, but it's fine for this project
-        const response = await fetch('../api/csrf/', {
-            method: 'GET'
-        })
-
+        if(csrftoken !== null) return csrftoken
+        const { offline, response } = await PiikkiOffline.apiFetch('../api/csrf/', { method: 'GET' })
+        if (offline) return null
         if(response.status === 200) {
             const body = await response.text()
-            const token = body.split('value="')[1].split('"')[0]
-            return token
+            csrftoken = body.split('value="')[1].split('"')[0]
         }
-        return null
+        return csrftoken
     }
 
 
@@ -863,7 +942,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             },
             body: formData
         }).then(async (response) => {
+            csrftoken = null
             if(await fetchProducts()) {
+                PiikkiOffline.setLoggedIn(true)
                 errorField.innerHTML = ''
                 document.querySelector('.login-panel').classList.remove('active')
                 busy = false
@@ -876,16 +957,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         })
     }
 
-    const updateActiveSession = async () => {
-        const response = await fetch('../api/sessions/active/')
-        if(!checkResponse(response)) {
-            toLogin()
-            return false
-        }
-        const session = await response.json()
+    const renderActiveSession = (session) => {
         const container = document.querySelector('#session-info')
-        if(session.id !== null) {
-            container.innerHTML = `${session.tab_name}`
+        if(session && session.id !== null) {
+            container.textContent = session.tab_name
             container.classList.add('active')
             container.classList.remove('none')
             activeHost = session
@@ -895,6 +970,22 @@ document.addEventListener("DOMContentLoaded", async () => {
             container.classList.remove('active')
             activeHost = null
         }
+    }
+
+    const updateActiveSession = async () => {
+        const { offline, response } = await PiikkiOffline.apiFetch('../api/sessions/active/')
+        if (offline) {
+            const cached = PiikkiOffline.getCache('session')
+            renderActiveSession(cached)
+            return true
+        }
+        if(!checkResponse(response)) {
+            toLogin()
+            return false
+        }
+        const session = await response.json()
+        PiikkiOffline.setCache('session', session)
+        renderActiveSession(session)
         return true
     }
 
@@ -903,15 +994,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelector('.session-panel').classList.add('opening')
         document.querySelector('#session-tab-list').scroll(0, 0)
         if(activeHost !== null) {
-            await updateActiveSession()
+            if (!PiikkiOffline.isOffline()) await updateActiveSession()
             document.querySelector('.session-details').style = ''
             document.querySelector('.session-selection').style = 'display: none;'
-            document.querySelector('#session-name').innerHTML = activeHost.tab_name
+            document.querySelector('#session-name').textContent = activeHost.tab_name
             document.querySelector('#session-started-at').innerHTML = new Date(activeHost.started_at).toLocaleString('fi-FI', {weekday: 'short', month: "numeric", day: "numeric", hour: "numeric", minute: "numeric"})
-            document.querySelector('#session-total-host').innerHTML = currency(activeHost.total_host)
-            document.querySelector('#session-total-all').innerHTML = currency(activeHost.total_all)
-
-
+            document.querySelector('#session-total-host').innerHTML = currency(activeHost.total_host || 0)
+            document.querySelector('#session-total-all').innerHTML = currency(activeHost.total_all || 0)
         } else {
             document.querySelector('.session-details').style = 'display: none;'
             document.querySelector('.session-selection').style = ''
@@ -935,16 +1024,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     const confirmSession = async () => {
         const tab = document.querySelector('#session-tab-list .selected')
         if(tab === null) return
-        const response = await fetch('../api/sessions/', {
+        const tabId = parseInt(tab.dataset.id)
+        const tabName = tab.textContent
+
+        if (PiikkiOffline.isOffline()) {
+            const item = PiikkiOffline.makeSessionStartItem(tabId, tabName)
+            PiikkiOffline.enqueue(item)
+            PiikkiOffline.setCache('session', { id: item.id, tab: tabId, tab_name: tabName, started_at: new Date().toISOString(), ended_at: null, total_host: 0, total_all: 0 })
+            closeSessionWindow()
+            updateActiveSession()
+            return
+        }
+
+        const { offline, response } = await PiikkiOffline.apiFetch('../api/sessions/', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': await getCsrfToken()
-            },
-            body: JSON.stringify({
-                "tab": parseInt(tab.dataset.id)
-            })
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': await getCsrfToken() },
+            body: JSON.stringify({ "tab": tabId })
         })
+        if (offline) {
+            const item = PiikkiOffline.makeSessionStartItem(tabId, tabName)
+            PiikkiOffline.enqueue(item)
+            PiikkiOffline.setCache('session', { id: item.id, tab: tabId, tab_name: tabName, started_at: new Date().toISOString(), ended_at: null, total_host: 0, total_all: 0 })
+        }
         closeSessionWindow()
         updateActiveSession()
         fetchProducts()
@@ -968,17 +1069,30 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         if(errors) return
 
-        const response = await fetch(`../api/sessions/${id}/end/`, {
+        if (PiikkiOffline.isOffline()) {
+            PiikkiOffline.enqueue(PiikkiOffline.makeSessionEndItem(id, null, people, comment))
+            PiikkiOffline.setCache('session', { id: null })
+            peopleInput.value = ''
+            commentInput.value = ''
+            updateActiveSession()
+            closeSessionWindow()
+            return
+        }
+
+        const { offline, response } = await PiikkiOffline.apiFetch(`../api/sessions/${id}/end/`, {
             method: 'POST',
-            headers: {
-                'X-CSRFToken': await getCsrfToken(),
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                "people": people,
-                "comment": comment
-            })
+            headers: { 'X-CSRFToken': await getCsrfToken(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ "people": people, "comment": comment })
         })
+        if (offline) {
+            PiikkiOffline.enqueue(PiikkiOffline.makeSessionEndItem(id, null, people, comment))
+            PiikkiOffline.setCache('session', { id: null })
+            peopleInput.value = ''
+            commentInput.value = ''
+            updateActiveSession()
+            closeSessionWindow()
+            return
+        }
         if(checkResponse(response)) {
             peopleInput.value = ''
             commentInput.value = ''
@@ -1022,10 +1136,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             if(!tab.active) element.classList.add('inactive')
 
             const balanceClass = tab.balance > 0 ? 'positive' : (tab.balance < 0 ? 'negative' : '')
-            element.innerHTML = `
-                <span class="tab-name">${tab.name}</span>
-                <span class="tab-balance ${balanceClass}">${currency(tab.balance)}</span>
-            `
+            const nameSpan = document.createElement('span')
+            nameSpan.className = 'tab-name'
+            nameSpan.textContent = tab.name
+            const balSpan = document.createElement('span')
+            balSpan.className = `tab-balance ${balanceClass}`
+            balSpan.textContent = currency(tab.balance)
+            element.append(nameSpan, balSpan)
             element.addEventListener('click', () => {
                 // Add loading highlight
                 document.querySelectorAll('.statistics-tabs > div').forEach(el => el.classList.remove('selected'))
@@ -1046,7 +1163,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         const tab = await response.json()
 
-        document.querySelector('#statistics-tab-name').innerHTML = tab.name
+        document.querySelector('#statistics-tab-name').textContent = tab.name
         document.querySelector('#statistics-tab-status').innerHTML = tab.active
         ? '<span class="active-status">Aktiivinen</span>'
         : '<span class="inactive-status">Ei aktiivinen</span>'
@@ -1100,13 +1217,19 @@ document.addEventListener("DOMContentLoaded", async () => {
                     hour: 'numeric',
                     minute: 'numeric'
                 })
-                element.innerHTML = `
-                    <div class="purchase-info">
-                        <span class="purchase-product">${purchase.quantity}x ${purchase.product_name || 'tuote'}</span>
-                        <span class="purchase-date">${date}</span>
-                    </div>
-                    <span class="purchase-total">${currency(purchase.total)}</span>
-                `
+                const infoDiv = document.createElement('div')
+                infoDiv.className = 'purchase-info'
+                const productSpan = document.createElement('span')
+                productSpan.className = 'purchase-product'
+                productSpan.textContent = `${purchase.quantity}x ${purchase.product_name || 'tuote'}`
+                const dateSpan = document.createElement('span')
+                dateSpan.className = 'purchase-date'
+                dateSpan.textContent = date
+                infoDiv.append(productSpan, dateSpan)
+                const totalSpan = document.createElement('span')
+                totalSpan.className = 'purchase-total'
+                totalSpan.textContent = currency(purchase.total)
+                element.append(infoDiv, totalSpan)
                 purchasesContainer.appendChild(element)
             })
         } else {
@@ -1194,21 +1317,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             body = {}
         }
         statisticsEnteredPin = ''
-        document.querySelectorAll('#statistics-pinpad .pin-dot').forEach((dot) => dot.classList.remove('filled'))
-        document.querySelectorAll('#statistics-pinpad .pin-key').forEach(btn => btn.disabled = false)
-        const attempts = body.pin_attempts || 0
-        tab.pin_attempts = attempts
-        const attemptsElement = document.querySelector('#statistics-pinpad .pin-attempts')
-        if(attemptsElement) {
-            attemptsElement.innerHTML = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
-        }
-        if(body.pin_locked) {
-            tab.pin_locked = true
-            const lockedElement = document.querySelector('#statistics-pinpad .pin-locked')
-            if(lockedElement) lockedElement.classList.add('active')
-            const card = document.querySelector('#statistics-pinpad .pin-card')
-            if(card) card.classList.add('locked')
-        }
+        applyPinError('#statistics-pinpad', tab, body)
     }
 
     const closeStatisticsWindow = () => {
@@ -1228,7 +1337,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelector('.statistics-detail-view').style = 'display: none;'
     }
 
-    document.querySelector('#statistics-button').addEventListener('click', openStatisticsWindow)
+    document.querySelector('#statistics-button').addEventListener('click', () => {
+        if (PiikkiOffline.isOffline()) return
+        openStatisticsWindow()
+    })
     document.querySelectorAll('.statistics-panel .close, .statistics-panel').forEach((x) => x.addEventListener('click', (e) => {
         if(e.target !== e.currentTarget) return
         closeStatisticsWindow()
@@ -1271,8 +1383,87 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.querySelector('.product-column').addEventListener('scroll', updateMarker)
     window.addEventListener('resize', updateMarker)
 
+    // Offline panel
+    const openOfflinePanel = () => {
+        const btn = document.querySelector('#offline-sync')
+        btn.classList.remove('disabled')
+        btn.textContent = 'Synkronoi'
+        PiikkiOffline.renderPanel()
+        document.querySelector('.offline-panel').classList.add('active')
+    }
+    const closeOfflinePanel = () => {
+        document.querySelector('.offline-panel').classList.remove('active')
+    }
+    document.querySelector('#offline-button').addEventListener('click', openOfflinePanel)
+    document.querySelectorAll('.offline-panel .close, .offline-panel').forEach(x => x.addEventListener('click', (e) => {
+        if(e.target !== e.currentTarget) return
+        closeOfflinePanel()
+    }))
+    document.querySelector('#offline-sync').addEventListener('click', async () => {
+        const btn = document.querySelector('#offline-sync')
+        btn.classList.add('disabled')
+        btn.textContent = 'Synkronoidaan...'
+        const result = await PiikkiOffline.sync()
+        if (result.busy) {
+            // A sync (auto-triggered) is already running; it will finish and
+            // refresh state. Don't surface it as a failure.
+            btn.classList.remove('disabled')
+            btn.textContent = 'Synkronoi'
+            return
+        }
+        if (!result.ran) {
+            btn.textContent = 'Ei yhteyttä'
+            return
+        }
+        btn.classList.remove('disabled')
+        btn.textContent = 'Synkronoi'
+        if (result.ok > 0 || result.failed > 0) {
+            const msg = `Onnistui: ${result.ok}, Epäonnistui: ${result.failed}`
+            const el = document.querySelector('.offline-queue-count')
+            if (el) el.textContent = msg
+        }
+        if (PiikkiOffline.getQueueSize() === 0 && !PiikkiOffline.isOffline()) {
+            closeOfflinePanel()
+            fetchProducts()
+            fetchTabs()
+            updateActiveSession()
+        }
+    })
+
+    PiikkiOffline.init({
+        onOfflineChange: (isOff) => {
+            if (!isOff) {
+                fetchProducts()
+                fetchTabs()
+                updateActiveSession()
+            }
+        },
+        onLoginNeeded: () => {
+            toLogin('Kirjaudu sisään synkronoidaksesi')
+        },
+    })
+
     enableQuickPayment()
-    if(await fetchTabs()) {
+
+    // Cold start: if offline but previously logged in, boot from cache
+    if (PiikkiOffline.isOffline() || !navigator.onLine) {
+        if (PiikkiOffline.wasLoggedIn()) {
+            const cachedTabs = PiikkiOffline.getCache('tabs')
+            const cachedProducts = PiikkiOffline.getCache('products')
+            if (cachedTabs && cachedProducts) {
+                PiikkiOffline.goOffline()
+                renderTabs(cachedTabs)
+                renderProducts(cachedProducts)
+                renderActiveSession(PiikkiOffline.getCache('session'))
+                toMain()
+            } else {
+                toLogin()
+            }
+        } else {
+            toLogin()
+        }
+    } else if(await fetchTabs()) {
+        PiikkiOffline.setLoggedIn(true)
         await updateActiveSession()
         toMain()
     }
