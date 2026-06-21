@@ -65,12 +65,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         return diffInYears === 1 ? '1 vuosi sitten' : `${diffInYears} vuotta sitten`
     }
 
-    const checkResponse = (response) => {
-        if(response.status !== 200) {
-            return false
-        }
-        return true
-    }
+    const checkResponse = (response) => response.ok
 
     // Read a quantity input as a non-negative decimal count (0.01 precision, 0–99.99).
     const readCount = (input) => {
