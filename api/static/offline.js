@@ -458,7 +458,7 @@ const PiikkiOffline = (() => {
         const countEl = panel.querySelector('.offline-queue-count')
         const lastUpdateEl = panel.querySelector('.offline-last-update')
 
-        if (countEl) countEl.textContent = q.length > 0 ? `${q.length} toimintoa jonossa` : 'Jono tyhjä'
+        if (countEl) countEl.textContent = q.length > 0 ? `${q.length} toimintoa odottaa synkronointia.` : 'Luodut kirjaukset lisätään jonoon, ja synkronoidaan palvelimelle yhteyden palauduttua.'
         if (lastUpdateEl) lastUpdateEl.textContent = `Viimeisin yhteys palvelimeen: ${humanizeTime(updatedAt)}`
 
         if (listEl) {
