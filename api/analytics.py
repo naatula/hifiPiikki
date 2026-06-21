@@ -77,7 +77,7 @@ def home_kpis():
     """Cheap quick numbers for the admin home page (no charts)."""
     now = timezone.now()
     since = now - timedelta(days=HOME_KPI_DAYS)
-    qs = Purchase.objects.filter(created_at__gte=since)
+    qs = Purchase.objects.filter(occurred_at__gte=since)
     revenue = qs.aggregate(s=Sum("total"))["s"] or Decimal("0")
     count = qs.count()
     tab_adjustments = (
@@ -119,8 +119,8 @@ def _resolve_period(request, now, base_qs=None, default=DEFAULT_PERIOD):
         return code, "Last 12 months", now - timedelta(days=365), None
     if code == "all":
         first = (
-            base_qs.order_by("created_at")
-            .values_list("created_at", flat=True)
+            base_qs.order_by("occurred_at")
+            .values_list("occurred_at", flat=True)
             .first()
         )
         return code, "All time", first or now, None
@@ -141,7 +141,7 @@ def _period_options(now, current, base_qs=None):
     """Selector entries: fixed windows + each calendar year with data + all."""
     base_qs = Purchase.objects if base_qs is None else base_qs
     entries = [("30d", "30 days"), ("90d", "90 days"), ("12m", "12 months")]
-    for d in base_qs.dates("created_at", "year", order="DESC"):
+    for d in base_qs.dates("occurred_at", "year", order="DESC"):
         entries.append((str(d.year), str(d.year)))
     entries.append(("all", "All time"))
     return [
@@ -227,7 +227,7 @@ def _type_revenue_series(qs, trunc, bucket, keys):
             else qs.filter(price_type__isnull=True)
         )
         bucketed = _bucketed(
-            rows.annotate(b=trunc("created_at")).values("b").annotate(v=Sum("total")),
+            rows.annotate(b=trunc("occurred_at")).values("b").annotate(v=Sum("total")),
             bucket,
             "v",
         )
@@ -245,9 +245,9 @@ def dashboard_context(request):
     bucket = "day" if (last_instant - start).days <= DAY_BUCKET_MAX_DAYS else "month"
     trunc = TruncDate if bucket == "day" else TruncMonth
 
-    period_filter = {"created_at__gte": start}
+    period_filter = {"occurred_at__gte": start}
     if end:
-        period_filter["created_at__lt"] = end
+        period_filter["occurred_at__lt"] = end
     period_qs = Purchase.objects.filter(**period_filter)
 
     # ---- KPI cards ------------------------------------------------------
@@ -289,7 +289,7 @@ def dashboard_context(request):
     keys, bucket_labels = _bucket_keys(start, last_instant, bucket)
 
     trend_rows = list(
-        period_qs.annotate(b=trunc("created_at"))
+        period_qs.annotate(b=trunc("occurred_at"))
         .values("b")
         .annotate(revenue=Sum("total"), n=Count("id"))
     )
@@ -301,8 +301,8 @@ def dashboard_context(request):
         prev_year_start = start.replace(year=int(code) - 1)
         prev_year_end = start
         prev_trend_rows = list(
-            Purchase.objects.filter(created_at__gte=prev_year_start, created_at__lt=prev_year_end)
-            .annotate(b=trunc("created_at"))
+            Purchase.objects.filter(occurred_at__gte=prev_year_start, occurred_at__lt=prev_year_end)
+            .annotate(b=trunc("occurred_at"))
             .values("b")
             .annotate(revenue=Sum("total"))
         )
@@ -336,7 +336,7 @@ def dashboard_context(request):
         period_qs.values("tab__name").annotate(v=Sum("total")).order_by("-v")[:10]
     )
     out_by_bucket = _bucketed(
-        period_qs.annotate(b=trunc("created_at")).values("b").annotate(v=Sum("total")),
+        period_qs.annotate(b=trunc("occurred_at")).values("b").annotate(v=Sum("total")),
         bucket,
         "v",
     )
@@ -405,8 +405,8 @@ def dashboard_context(request):
         Subquery(
             Purchase.objects.filter(
                 tab=OuterRef("tab"),
-                created_at__gte=OuterRef("started_at"),
-                created_at__lte=OuterRef("ended_at"),
+                occurred_at__gte=OuterRef("started_at"),
+                occurred_at__lte=OuterRef("ended_at"),
             )
             .values("tab")
             .annotate(s=Sum("total"))
@@ -438,18 +438,16 @@ def dashboard_context(request):
         "avg_hours": (total_seconds / 3600 / h_count) if h_count else 0,
     }
 
-    # ---- Activity patterns (over the period, local time) ----------------
-    # Purchase counts split by price_type, both by hour-of-day and weekday.
     by_hour = defaultdict(lambda: {"in": 0, "out": 0, "unknown": 0})
     for r in (
-        period_qs.annotate(h=ExtractHour("created_at", tzinfo=LOCAL_TZ))
+        period_qs.annotate(h=ExtractHour("occurred_at", tzinfo=LOCAL_TZ))
         .values("h", "price_type")
         .annotate(n=Count("id"))
     ):
         by_hour[r["h"]][r["price_type"] or "unknown"] = r["n"]
     by_dow = defaultdict(lambda: {"in": 0, "out": 0, "unknown": 0})
     for r in (
-        period_qs.annotate(w=ExtractWeekDay("created_at", tzinfo=LOCAL_TZ))
+        period_qs.annotate(w=ExtractWeekDay("occurred_at", tzinfo=LOCAL_TZ))
         .values("w", "price_type")
         .annotate(n=Count("id"))
     ):
@@ -541,11 +539,13 @@ def tab_dashboard_context(request, tab):
     bucket = "day" if (last_instant - start).days <= DAY_BUCKET_MAX_DAYS else "month"
     trunc = TruncDate if bucket == "day" else TruncMonth
 
-    period_filter = {"created_at__gte": start}
+    purchase_filter = {"occurred_at__gte": start}
+    adjustment_filter = {"created_at__gte": start}
     if end:
-        period_filter["created_at__lt"] = end
-    period_qs = tab_purchases.filter(**period_filter)
-    adjustment_qs = tab_adjustments.filter(**period_filter)
+        purchase_filter["occurred_at__lt"] = end
+        adjustment_filter["created_at__lt"] = end
+    period_qs = tab_purchases.filter(**purchase_filter)
+    adjustment_qs = tab_adjustments.filter(**adjustment_filter)
 
     # ---- KPI cards ------------------------------------------------------
     spent = period_qs.aggregate(s=Sum("total"))["s"] or Decimal("0")
@@ -560,10 +560,10 @@ def tab_dashboard_context(request, tab):
     out_share = (out_revenue / classified_revenue * 100) if classified_revenue else Decimal("0")
 
     first_activity = (
-        tab_purchases.order_by("created_at").values_list("created_at", flat=True).first()
+        tab_purchases.order_by("occurred_at").values_list("occurred_at", flat=True).first()
     )
     last_activity = (
-        tab_purchases.order_by("-created_at").values_list("created_at", flat=True).first()
+        tab_purchases.order_by("-occurred_at").values_list("occurred_at", flat=True).first()
     )
 
     kpis = {
@@ -586,7 +586,7 @@ def tab_dashboard_context(request, tab):
     keys, bucket_labels = _bucket_keys(start, last_instant, bucket)
 
     purchases_by_bucket = _bucketed(
-        period_qs.annotate(b=trunc("created_at")).values("b").annotate(v=Sum("total")),
+        period_qs.annotate(b=trunc("occurred_at")).values("b").annotate(v=Sum("total")),
         bucket,
         "v",
     )
@@ -605,7 +605,7 @@ def tab_dashboard_context(request, tab):
     # drifted from the ledger or the tab had an opening balance predating it.
     net_since_start = (
         (tab_adjustments.filter(created_at__gte=start).aggregate(s=Sum("sum"))["s"] or Decimal("0"))
-        - (tab_purchases.filter(created_at__gte=start).aggregate(s=Sum("total"))["s"] or Decimal("0"))
+        - (tab_purchases.filter(occurred_at__gte=start).aggregate(s=Sum("total"))["s"] or Decimal("0"))
     )
     opening = tab.balance - net_since_start
     running = []
@@ -637,8 +637,8 @@ def tab_dashboard_context(request, tab):
         Subquery(
             Purchase.objects.filter(
                 tab=OuterRef("tab"),
-                created_at__gte=OuterRef("started_at"),
-                created_at__lte=OuterRef("ended_at"),
+                occurred_at__gte=OuterRef("started_at"),
+                occurred_at__lte=OuterRef("ended_at"),
             )
             .values("tab")
             .annotate(s=Sum("total"))
@@ -669,34 +669,31 @@ def tab_dashboard_context(request, tab):
         "avg_hours": (total_seconds / 3600 / h_count) if h_count else 0,
     }
 
-    # ---- Activity patterns (local time) ---------------------------------
     by_hour = defaultdict(lambda: {"in": 0, "out": 0, "unknown": 0})
     for r in (
-        period_qs.annotate(h=ExtractHour("created_at", tzinfo=LOCAL_TZ))
+        period_qs.annotate(h=ExtractHour("occurred_at", tzinfo=LOCAL_TZ))
         .values("h", "price_type")
         .annotate(n=Count("id"))
     ):
         by_hour[r["h"]][r["price_type"] or "unknown"] = r["n"]
     by_dow = defaultdict(lambda: {"in": 0, "out": 0, "unknown": 0})
     for r in (
-        period_qs.annotate(w=ExtractWeekDay("created_at", tzinfo=LOCAL_TZ))
+        period_qs.annotate(w=ExtractWeekDay("occurred_at", tzinfo=LOCAL_TZ))
         .values("w", "price_type")
         .annotate(n=Count("id"))
     ):
         by_dow[r["w"]][r["price_type"] or "unknown"] = r["n"]
 
-    # Reference distribution: every tab's purchases over the same window, so the
-    # comparison bars show how this tab's timing compares to the club average.
-    global_qs = Purchase.objects.filter(**period_filter)
+    global_qs = Purchase.objects.filter(**purchase_filter)
     global_hour = {
         r["h"]: r["n"]
-        for r in global_qs.annotate(h=ExtractHour("created_at", tzinfo=LOCAL_TZ))
+        for r in global_qs.annotate(h=ExtractHour("occurred_at", tzinfo=LOCAL_TZ))
         .values("h")
         .annotate(n=Count("id"))
     }
     global_dow = {
         r["w"]: r["n"]
-        for r in global_qs.annotate(w=ExtractWeekDay("created_at", tzinfo=LOCAL_TZ))
+        for r in global_qs.annotate(w=ExtractWeekDay("occurred_at", tzinfo=LOCAL_TZ))
         .values("w")
         .annotate(n=Count("id"))
     }

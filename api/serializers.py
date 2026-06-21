@@ -39,7 +39,7 @@ class ProductGroupSerializer(serializers.ModelSerializer):
 class PurchaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Purchase
-        fields = ['id', 'tab', 'product', 'quantity', 'total', 'price_type', 'created_at']
+        fields = ['id', 'tab', 'product', 'quantity', 'total', 'price_type', 'created_at', 'client_uuid', 'occurred_at']
 
 class SettingSerializer(serializers.ModelSerializer):
     class Meta:
@@ -50,7 +50,7 @@ class SessionSerializer(serializers.ModelSerializer):
     tab_name = serializers.CharField(source='tab.name', read_only=True)
     class Meta:
         model = Session
-        fields = ['id', 'tab', 'tab_name', 'people', 'comment', 'started_at', 'ended_at']
+        fields = ['id', 'tab', 'tab_name', 'people', 'comment', 'started_at', 'ended_at', 'client_uuid']
 
 class TabAdjustmentSerializer(serializers.ModelSerializer):
     tab_name = serializers.CharField(source='tab.name', read_only=True)
