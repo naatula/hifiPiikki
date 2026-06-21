@@ -730,7 +730,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             element.dataset.id = x.id
             element.textContent = x.name
             document.querySelector('.checkout-panel .tab-list .tabs').appendChild(element)
-            document.querySelector('#session-tab-list').appendChild(element.cloneNode(true))
             element.addEventListener('click', () => selectTab(element))
         })
         // Add most recently used (updated_at) tabs to suggestions
