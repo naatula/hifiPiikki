@@ -233,6 +233,24 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateConfirmation()
     }
 
+    // Apply wrong-PIN / lockout feedback to any pin card. Updates the tab object
+    // in place and reflects attempt count + locked state in the DOM.
+    const applyPinError = (pinpadSelector, tab, body) => {
+        const attempts = body.pin_attempts || 0
+        tab.pin_attempts = attempts
+        document.querySelectorAll(`${pinpadSelector} .pin-dot`).forEach(dot => dot.classList.remove('filled'))
+        document.querySelectorAll(`${pinpadSelector} .pin-key`).forEach(btn => btn.disabled = false)
+        const attemptsEl = document.querySelector(`${pinpadSelector} .pin-attempts`)
+        if(attemptsEl) attemptsEl.textContent = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
+        if(body.pin_locked) {
+            tab.pin_locked = true
+            const lockedEl = document.querySelector(`${pinpadSelector} .pin-locked`)
+            if(lockedEl) lockedEl.classList.add('active')
+            const card = document.querySelector(`${pinpadSelector} .pin-card`)
+            if(card) card.classList.add('locked')
+        }
+    }
+
     const verifyPinForTabSelection = async (pin) => {
         const tab = multiTabPinPendingTab
         if (!tab) return
@@ -257,18 +275,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         let body = {}
         try { body = await response.json() } catch(e) {}
         enteredPin = ''
-        document.querySelectorAll('#pinpad .pin-dot').forEach(dot => dot.classList.remove('filled'))
-        document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = false)
-        const attempts = body.pin_attempts || 0
-        const attemptsEl = document.querySelector('#pinpad .pin-attempts')
-        if (attemptsEl) attemptsEl.innerHTML = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
-        if (body.pin_locked) {
-            tab.pin_locked = true
-            const lockedEl = document.querySelector('#pinpad .pin-locked')
-            if (lockedEl) lockedEl.classList.add('active')
-            const card = document.querySelector('#pinpad .pin-card')
-            if (card) card.classList.add('locked')
-        }
+        applyPinError('#pinpad', tab, body)
         positionPinpad()
     }
 
@@ -405,21 +412,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             body = {}
         }
         enteredPin = ''
-        document.querySelectorAll('#pinpad .pin-dot').forEach((dot) => dot.classList.remove('filled'))
-        document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = false)
-        const attempts = body.pin_attempts || 0
-        if(tab.pin_attempts !== undefined) tab.pin_attempts = attempts
-        const attemptsElement = document.querySelector('#pinpad .pin-attempts')
-        if(attemptsElement) {
-            attemptsElement.innerHTML = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
-        }
-        if(body.pin_locked) {
-            if(tab.pin_locked !== undefined) tab.pin_locked = true
-            const lockedElement = document.querySelector('#pinpad .pin-locked')
-            if(lockedElement) lockedElement.classList.add('active')
-            const card = document.querySelector('#pinpad .pin-card')
-            if(card) card.classList.add('locked')
-        }
+        applyPinError('#pinpad', tab, body)
         // The attempts / locked message changes the card height; re-anchor it
         // above the confirm button so it stays put.
         positionPinpad()
@@ -1201,21 +1194,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             body = {}
         }
         statisticsEnteredPin = ''
-        document.querySelectorAll('#statistics-pinpad .pin-dot').forEach((dot) => dot.classList.remove('filled'))
-        document.querySelectorAll('#statistics-pinpad .pin-key').forEach(btn => btn.disabled = false)
-        const attempts = body.pin_attempts || 0
-        tab.pin_attempts = attempts
-        const attemptsElement = document.querySelector('#statistics-pinpad .pin-attempts')
-        if(attemptsElement) {
-            attemptsElement.innerHTML = attempts > 0 ? `Väärä PIN-koodi. Yrityksiä: ${attempts}` : ''
-        }
-        if(body.pin_locked) {
-            tab.pin_locked = true
-            const lockedElement = document.querySelector('#statistics-pinpad .pin-locked')
-            if(lockedElement) lockedElement.classList.add('active')
-            const card = document.querySelector('#statistics-pinpad .pin-card')
-            if(card) card.classList.add('locked')
-        }
+        applyPinError('#statistics-pinpad', tab, body)
     }
 
     const closeStatisticsWindow = () => {
