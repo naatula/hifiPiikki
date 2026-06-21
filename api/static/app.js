@@ -833,8 +833,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         return true
     }
 
-    const getCsrfToken = () =>
-        document.cookie.split('; ').find(c => c.startsWith('csrftoken='))?.split('=')[1] ?? null
+    const getCsrfToken = () => {
+        const cookie = document.cookie.split('; ').find(c => c.startsWith('csrftoken='))
+        return cookie ? cookie.slice('csrftoken='.length) : null
+    }
 
 
     const handleLogin = async () => {
