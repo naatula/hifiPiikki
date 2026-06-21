@@ -530,11 +530,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             div.innerHTML = ``
             button.classList.add('disabled')
         } else {
-            div.innerHTML = `
-                <div>${displayName}</div>
-                <div>←</div>
-                <div>${currency(total)}</div>
-            `
+            div.innerHTML = ''
+            const nameDiv = document.createElement('div')
+            nameDiv.textContent = displayName
+            const arrowDiv = document.createElement('div')
+            arrowDiv.textContent = '←'
+            const totalDiv = document.createElement('div')
+            totalDiv.textContent = currency(total)
+            div.append(nameDiv, arrowDiv, totalDiv)
             button.classList.remove('disabled')
         }
 
@@ -585,9 +588,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         const f_price_in = currency(product.price_in)
         const fetchTabsPromise = fetchTabs()
         const descriptionElement = document.querySelector('#checkout-description')
-        document.querySelector('#checkout-title').innerHTML = product.name
+        document.querySelector('#checkout-title').textContent = product.name
         if(product.note || product.description) {
-            descriptionElement.innerHTML = `<h2>${product.note || ''}</h2><p>${product.description || ''}</p>`
+            const noteH2 = document.createElement('h2')
+            noteH2.textContent = product.note || ''
+            const descP = document.createElement('p')
+            descP.textContent = product.description || ''
+            descriptionElement.innerHTML = ''
+            descriptionElement.append(noteH2, descP)
             descriptionElement.style = 'display: block'
         } else {
             descriptionElement.style = 'display: none'
@@ -667,7 +675,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const tabData = tabsById[id]
         const tabObj = {
             "id": id,
-            "name": element.innerHTML,
+            "name": element.textContent,
             "pin_required": tabData ? !!tabData.pin_required : false,
             "pin_attempts": tabData ? (tabData.pin_attempts || 0) : 0,
             "pin_locked": tabData ? !!tabData.pin_locked : false
@@ -727,7 +735,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         tabs.forEach((x) => {
             const element = document.createElement('div')
             element.dataset.id = x.id
-            element.innerHTML = x.name
+            element.textContent = x.name
             document.querySelector('.checkout-panel .tab-list .tabs').appendChild(element)
             document.querySelector('#session-tab-list').appendChild(element.cloneNode(true))
             element.addEventListener('click', () => selectTab(element))
@@ -736,7 +744,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         tabs.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)).slice(0, 6).forEach((x) => {
             const element = document.createElement('div')
             element.dataset.id = x.id
-            element.innerHTML = x.name
+            element.textContent = x.name
             document.querySelector('.checkout-panel .tab-list .suggestions').appendChild(element)
             element.addEventListener('click', () => selectTab(element))
         })
@@ -789,7 +797,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             div.id = `category-${group.id}`
             div.classList.add('category')
             const title = document.createElement('h2')
-            title.innerHTML = group.name
+            title.textContent = group.name
             div.appendChild(title)
 
             const productsDiv = document.createElement('div')
@@ -800,9 +808,17 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const productDiv = document.createElement('div')
                 productDiv.id = `product-${product.id}`
                 const price = product.price_out === product.price_in ? `${product.price_out.replace(".",",")} €` : `${product.price_in.replace(".",",")} € / ${product.price_out.replace(".",",")} €`
-                productDiv.innerHTML =
-                `<h3>${product.name}</h3>
-                <div><span class="note">${product.note || ''}</span><span class="price">${price}</span>`
+                const h3 = document.createElement('h3')
+                h3.textContent = product.name
+                const infoDiv = document.createElement('div')
+                const noteSpan = document.createElement('span')
+                noteSpan.className = 'note'
+                noteSpan.textContent = product.note || ''
+                const priceSpan = document.createElement('span')
+                priceSpan.className = 'price'
+                priceSpan.textContent = price
+                infoDiv.append(noteSpan, priceSpan)
+                productDiv.append(h3, infoDiv)
                 productsDiv.appendChild(productDiv)
 
                 productDiv.addEventListener('click', () => {
@@ -814,7 +830,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const a = document.createElement('a')
             a.href = `#category-${group.id}`
             a.dataset.id = group.id
-            a.innerHTML = group.name
+            a.textContent = group.name
             document.querySelector('.navigation').appendChild(a)
         })
         // Add footer to product list
@@ -867,7 +883,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const session = await response.json()
         const container = document.querySelector('#session-info')
         if(session.id !== null) {
-            container.innerHTML = `${session.tab_name}`
+            container.textContent = session.tab_name
             container.classList.add('active')
             container.classList.remove('none')
             activeHost = session
@@ -888,7 +904,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             await updateActiveSession()
             document.querySelector('.session-details').style = ''
             document.querySelector('.session-selection').style = 'display: none;'
-            document.querySelector('#session-name').innerHTML = activeHost.tab_name
+            document.querySelector('#session-name').textContent = activeHost.tab_name
             document.querySelector('#session-started-at').innerHTML = new Date(activeHost.started_at).toLocaleString('fi-FI', {weekday: 'short', month: "numeric", day: "numeric", hour: "numeric", minute: "numeric"})
             document.querySelector('#session-total-host').innerHTML = currency(activeHost.total_host)
             document.querySelector('#session-total-all').innerHTML = currency(activeHost.total_all)
@@ -1004,10 +1020,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             if(!tab.active) element.classList.add('inactive')
 
             const balanceClass = tab.balance > 0 ? 'positive' : (tab.balance < 0 ? 'negative' : '')
-            element.innerHTML = `
-                <span class="tab-name">${tab.name}</span>
-                <span class="tab-balance ${balanceClass}">${currency(tab.balance)}</span>
-            `
+            const nameSpan = document.createElement('span')
+            nameSpan.className = 'tab-name'
+            nameSpan.textContent = tab.name
+            const balSpan = document.createElement('span')
+            balSpan.className = `tab-balance ${balanceClass}`
+            balSpan.textContent = currency(tab.balance)
+            element.append(nameSpan, balSpan)
             element.addEventListener('click', () => {
                 // Add loading highlight
                 document.querySelectorAll('.statistics-tabs > div').forEach(el => el.classList.remove('selected'))
@@ -1028,7 +1047,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         const tab = await response.json()
 
-        document.querySelector('#statistics-tab-name').innerHTML = tab.name
+        document.querySelector('#statistics-tab-name').textContent = tab.name
         document.querySelector('#statistics-tab-status').innerHTML = tab.active
         ? '<span class="active-status">Aktiivinen</span>'
         : '<span class="inactive-status">Ei aktiivinen</span>'
@@ -1082,13 +1101,19 @@ document.addEventListener("DOMContentLoaded", async () => {
                     hour: 'numeric',
                     minute: 'numeric'
                 })
-                element.innerHTML = `
-                    <div class="purchase-info">
-                        <span class="purchase-product">${purchase.quantity}x ${purchase.product_name || 'tuote'}</span>
-                        <span class="purchase-date">${date}</span>
-                    </div>
-                    <span class="purchase-total">${currency(purchase.total)}</span>
-                `
+                const infoDiv = document.createElement('div')
+                infoDiv.className = 'purchase-info'
+                const productSpan = document.createElement('span')
+                productSpan.className = 'purchase-product'
+                productSpan.textContent = `${purchase.quantity}x ${purchase.product_name || 'tuote'}`
+                const dateSpan = document.createElement('span')
+                dateSpan.className = 'purchase-date'
+                dateSpan.textContent = date
+                infoDiv.append(productSpan, dateSpan)
+                const totalSpan = document.createElement('span')
+                totalSpan.className = 'purchase-total'
+                totalSpan.textContent = currency(purchase.total)
+                element.append(infoDiv, totalSpan)
                 purchasesContainer.appendChild(element)
             })
         } else {
