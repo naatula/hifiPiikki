@@ -8,9 +8,36 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from datetime import datetime, timedelta
 
+from django.utils.dateparse import parse_datetime
+
 from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked, get_cash_enabled
 from .serializers import PurchaseSerializer, TabSerializer, ProductSerializer, ProductGroupSerializer, SessionSerializer
 from .shelly import turn_on_shelly, schedule_turn_off_shelly
+
+
+# Window within which a session event time counts as a live action (relay
+# should toggle) rather than a historical offline replay landing late (relay
+# must stay untouched). A timed-out online request that gets buffered replays
+# within seconds; a genuinely offline start/end may replay hours later.
+LIVE_EVENT_WINDOW = timedelta(minutes=5)
+
+
+def _is_live_event(event_time):
+    """True if event_time is recent enough to drive the Shelly relay.
+
+    Accepts a datetime or an ISO-8601 string (the `end` view assigns the raw
+    request value before saving). A missing/unparseable time defaults to live,
+    matching the pre-existing online behaviour where no timestamp meant "now".
+    """
+    if event_time is None:
+        return True
+    if isinstance(event_time, str):
+        event_time = parse_datetime(event_time)
+        if event_time is None:
+            return True
+    if timezone.is_naive(event_time):
+        event_time = timezone.make_aware(event_time)
+    return abs(timezone.now() - event_time) <= LIVE_EVENT_WINDOW
 
 
 class PurchaseViewSet(viewsets.GenericViewSet):
@@ -258,7 +285,12 @@ class SessionViewSet(viewsets.GenericViewSet):
                 if existing:
                     return Response(SessionSerializer(existing).data)
                 raise
-            if not client_uuid:
+            # Toggle the relay only for a live start, not a historical offline
+            # replay landing late (which must not flip the relay hours later).
+            # Freshness of the event time — not client_uuid presence — marks a
+            # replay, since online starts now also carry a client_uuid for
+            # idempotency.
+            if _is_live_event(serializer.instance.started_at):
                 turn_on_shelly()
             return Response(serializer.data)
         return Response(serializer.errors)
@@ -276,8 +308,9 @@ class SessionViewSet(viewsets.GenericViewSet):
             return Response({'error': 'Comment is required'}, status=400)
         session.ended_at = request.data.get('ended_at', timezone.now())
         session.save()
-        is_replay = request.data.get('client_uuid')
-        if not is_replay:
+        # See create(): gate the relay on event-time freshness, not client_uuid,
+        # so a replayed historical end doesn't schedule a turn-off hours late.
+        if _is_live_event(session.ended_at):
             schedule_turn_off_shelly(60)
         return Response(SessionSerializer(session).data)
 
