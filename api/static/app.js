@@ -141,11 +141,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const toLogin = (message = null) => {
-
         document.querySelector('.login-panel').classList.add('active')
-        if(message) {
-            PiikkiToast.show({ message, variant: 'error', icon: 'error', duration: 6000 })
-        }
+        setLoginBusy(false)
+        showLoginError(message)
     }
 
     // Reveal the PIN keypad above the confirm button. The button itself
@@ -262,7 +260,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    const verifyPinForTabSelection = async (pin) => {
+    const verifyPinForTabSelection = async (pin, allowReauth = true) => {
         const tab = multiTabPinPendingTab
         if (!tab) return
         const token = await getCsrfToken()
@@ -283,10 +281,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             updateConfirmation()
             return
         }
-        let body = {}
-        try { body = await response.json() } catch(e) {}
+        const cls = await classifyMutation(response)
+        if (cls.kind === 'auth') {
+            if (allowReauth && await trySilentReauth()) {
+                csrftoken = null
+                return verifyPinForTabSelection(pin, false)
+            }
+            toLogin('Istunto vanhentunut — kirjaudu uudelleen')
+            return
+        }
         enteredPin = ''
-        applyPinError('#pinpad', tab, body)
+        applyPinError('#pinpad', tab, cls.body || {})
         positionPinpad()
     }
 
@@ -326,36 +331,43 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         document.querySelector('#confirmation').classList.add('ok')
         audio.play()
-        const tabEntries = [...selectedTabs.values()]
-        const allResponses = []
-        try {
-            for (const { tab, pin } of tabEntries) {
-                const responses = await Promise.all(items.map(item => postPurchase(item, pin, token, tab)))
-                allResponses.push(...responses)
+        // One purchase per (tab, line); each carries its own client_uuid. A tab's
+        // PIN rides along in memory and is never buffered, so an expired session
+        // is recovered by an inline silent re-auth + retry inside runPurchaseAttempts.
+        const attempts = []
+        for (const { tab, pin } of selectedTabs.values()) {
+            for (const item of items) {
+                attempts.push({ tab, pin, item: { ...item, client_uuid: crypto.randomUUID() } })
             }
-        } catch {
-            for (const { tab } of tabEntries) {
-                enqueuePurchaseItems(items, tab)
-            }
-            busy = false
-            toMain()
-            return
         }
         setTimeout(async () => {
-            if (allResponses.every(checkResponse)) {
+            let result
+            try {
+                result = await runPurchaseAttempts(attempts, true)
+            } catch {
+                // Network dropped mid-batch — buffer every line (idempotent via
+                // client_uuid, so any that already landed won't double-charge).
+                for (const a of attempts) enqueuePurchaseItems([a.item], a.tab)
                 busy = false
                 toMain()
-            } else {
-                busy = false
-                document.querySelector('#confirmation').classList.remove('ok')
-                toMain()
-                PiikkiToast.show({
-                    id: 'purchase-error',
-                    message: 'Osto epäonnistui osalle piikkejä — tarkista tilanne historiasta',
-                    variant: 'error', icon: 'error', duration: 0, dismissible: true,
-                    actions: [{ label: 'Lataa uudelleen', primary: true, onClick: () => { location.reload() } }],
-                })
+                return
             }
+            busy = false
+            if (!result.ok) {
+                document.querySelector('#confirmation').classList.remove('ok')
+                if (result.kind === 'auth') {
+                    // No stored credentials to recover with — re-login is the only path.
+                    toLogin('Istunto vanhentunut — kirjaudu uudelleen')
+                } else {
+                    PiikkiToast.show({
+                        id: 'purchase-error',
+                        message: 'Osto epäonnistui osalle piikkejä — tarkista tilanne historiasta',
+                        variant: 'error', icon: 'error', duration: 0, dismissible: true,
+                        actions: [{ label: 'Lataa uudelleen', primary: true, onClick: () => { location.reload() } }],
+                    })
+                }
+            }
+            toMain()
         }, 500)
     }
 
@@ -386,6 +398,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             "product": checkoutProduct?.id,
         }
         if(item.price_type) body.price_type = item.price_type
+        // A stable client_uuid lets the server dedupe a replay/retry of this exact
+        // line, so re-sending after a recovered session never double-charges.
+        if(item.client_uuid) body.client_uuid = item.client_uuid
         if(pin !== null) body.pin = pin
         return fetch('../api/purchases/', {
             method: 'POST',
@@ -409,7 +424,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const confirmPurchase = async () => {
         if(busy) return
-        const items = getLineItems()
+        // Tag each line with a client_uuid up front so the same id is used whether
+        // it goes online now or gets buffered on failure — replays stay idempotent.
+        const items = getLineItems().map((it) => ({ ...it, client_uuid: crypto.randomUUID() }))
         const tab = getTab()
         if(items.length === 0 || tab === null) return
         busy = true
@@ -436,13 +453,24 @@ document.addEventListener("DOMContentLoaded", async () => {
         setTimeout( async () => {
             try {
                 const responses = await Promise.all(requests)
-                if(responses.every(checkResponse)) {
-                    busy = false
-                    toMain()
-                } else {
-                    busy = false
+                // Buffer only the lines the expired session rejected (a 403 is
+                // rejected before any DB write, so this can't double-charge); the
+                // queue then silently re-auths and replays them.
+                const lapsed = []
+                let otherError = false
+                for (let i = 0; i < responses.length; i++) {
+                    if (responses[i].ok) continue
+                    const cls = await classifyMutation(responses[i])
+                    if (cls.kind === 'auth') lapsed.push(items[i])
+                    else otherError = true
+                }
+                busy = false
+                if (lapsed.length) {
+                    enqueuePurchaseItems(lapsed, tab)
+                    trySilentReauth()   // re-auth, then drain the queue (no CSRF race)
+                }
+                if (otherError) {
                     document.querySelector('#confirmation').classList.remove('ok')
-                    toMain()
                     PiikkiToast.show({
                         id: 'purchase-error',
                         message: 'Osto ei mennyt läpi — tarkista tilanne historiasta',
@@ -450,6 +478,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                         actions: [{ label: 'Lataa uudelleen', primary: true, onClick: () => { location.reload() } }],
                     })
                 }
+                toMain()
             } catch {
                 enqueuePurchaseItems(items, tab)
                 busy = false
@@ -458,17 +487,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         }, 500)
     }
 
-    const submitPinPurchase = async (pin) => {
+    const submitPinPurchase = async (pin, startItems = null, allowReauth = true) => {
         if(busy) return
-        const items = getLineItems()
+        // Tag each line with a client_uuid so an inline retry after re-auth dedupes.
+        const items = startItems || getLineItems().map((it) => ({ ...it, client_uuid: crypto.randomUUID() }))
         const tab = getTab()
         if(items.length === 0 || tab === null) return
         const token = await getCsrfToken()
         // Send the items one at a time so a wrong PIN aborts before any purchase
         // is made (and the attempt counter is only bumped once).
         var response = null
-        for(const item of items) {
-            response = await postPurchase(item, pin, token, tab)
+        var idx = 0
+        for(idx = 0; idx < items.length; idx++) {
+            response = await postPurchase(items[idx], pin, token, tab)
             if(response.status !== 200) break
         }
         if(response && response.status === 200) {
@@ -481,15 +512,21 @@ document.addEventListener("DOMContentLoaded", async () => {
             }, 500)
             return
         }
-        // 403: wrong pin or locked
-        var body = {}
-        try {
-            body = await response.json()
-        } catch(e) {
-            body = {}
+        const cls = await classifyMutation(response)
+        if(cls.kind === 'auth') {
+            // Session expired mid PIN purchase. The PIN is never buffered, so
+            // recover inline: silent re-auth, then resume from the failed line
+            // (items[idx] got a 403 so it never persisted; earlier lines did).
+            if(allowReauth && await trySilentReauth()) {
+                csrftoken = null
+                return submitPinPurchase(pin, items.slice(idx), false)
+            }
+            toLogin('Istunto vanhentunut — kirjaudu uudelleen')
+            return
         }
+        // 403: wrong pin or locked
         enteredPin = ''
-        applyPinError('#pinpad', tab, body)
+        applyPinError('#pinpad', tab, cls.body || {})
         // The attempts / locked message changes the card height; re-anchor it
         // above the confirm button so it stays put.
         positionPinpad()
@@ -845,16 +882,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         })
     }
 
-    const fetchTabs = async () => {
+    const fetchTabs = async (allowReauth = true) => {
         const { offline, response } = await PiikkiOffline.apiFetch('../api/tabs/')
         if (offline) {
             const cached = PiikkiOffline.getCache('tabs')
             if (cached) { renderTabs(cached); return true }
             return false
         }
-        if(!checkResponse(response)) {
-            toLogin()
-            return false
+        if(!response.ok) {
+            return recoverFromFailure(response, allowReauth ? () => fetchTabs(false) : null)
         }
         const tabs = await response.json()
         PiikkiOffline.setCache('tabs', tabs)
@@ -914,16 +950,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateMarker()
     }
 
-    const fetchProducts = async () => {
+    const fetchProducts = async (allowReauth = true) => {
         const { offline, response } = await PiikkiOffline.apiFetch('../api/products/')
         if (offline) {
             const cached = PiikkiOffline.getCache('products')
             if (cached) { renderProducts(cached); return true }
             return false
         }
-        if(!checkResponse(response)) {
-            toLogin()
-            return false
+        if(!response.ok) {
+            return recoverFromFailure(response, allowReauth ? () => fetchProducts(false) : null)
         }
         const products = await response.json()
         PiikkiOffline.setCache('products', products)
@@ -958,64 +993,202 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
 
+    // Surface a login error through the shared toast system (deduped by id so a
+    // new error replaces the old). No-op on an empty message — toLogin() passes
+    // null on a clean first-load prompt.
     const showLoginError = (msg) => {
+        if (!msg) return
         PiikkiToast.show({ id: 'login-error', message: msg, variant: 'error', icon: 'error', duration: 6000 })
     }
 
-    const handleLogin = async () => {
-        const username = document.querySelector('.login-panel input[name="username"]').value
-        const password = document.querySelector('.login-panel input[name="password"]').value
-        const formData = new FormData();
-        formData.append('username', username);
-        formData.append('password', password);
+    const setLoginBusy = (isBusy) => {
+        const button = document.querySelector('#login')
+        button.disabled = isBusy
+        button.textContent = isBusy ? 'Kirjaudutaan…' : 'Kirjaudu'
+        document.querySelectorAll('#login-form input').forEach((i) => { i.disabled = isBusy })
+    }
 
+    // True only for responses that re-logging-in can actually fix: an expired or
+    // invalid session, or a CSRF/cookie failure. DRF SessionAuthentication
+    // answers both with 403 (it would use 401 if it set a WWW-Authenticate
+    // header). Anything else — 5xx, 404, a flaky proxy — is a general failure
+    // that must NOT bounce the operator to the login screen.
+    const isAuthFailure = (response) => !!response && (response.status === 401 || response.status === 403)
+
+    // Run a session login. Resolves { ok: true, products } on success, or
+    // { ok: false, reason } where reason is 'credentials' (server rejected the
+    // username/password) or 'network' (server unreachable / error).
+    const performLogin = async (username, password) => {
+        // Force a fresh CSRF token: with CSRF_USE_SESSIONS the token lives in the
+        // session, so a cached one is stale once the session has changed/expired
+        // (which is exactly when a silent re-auth runs) — reusing it CSRF-fails
+        // the login POST ("CSRF cookie not set").
+        csrftoken = null
         let token
         try {
             token = await getCsrfToken()
         } catch {
-            showLoginError('Palvelimeen ei saada yhteyttä')
-            return
+            return { ok: false, reason: 'network' }
         }
-        if (!token) {
-            showLoginError('Palvelimeen ei saada yhteyttä')
-            return
-        }
+        if (!token) return { ok: false, reason: 'network' }
 
-        let response
+        const formData = new FormData()
+        formData.append('username', username)
+        formData.append('password', password)
+
         try {
-            response = await fetch('../api/auth/login/', {
+            // redirect: 'manual' — a correct login answers with a 302 to a page
+            // we don't care about (Django's default /accounts/profile/, which
+            // 404s here); following it would mask success as a failed response.
+            // The Set-Cookie from the 302 still establishes the session.
+            await fetch('../api/auth/login/', {
                 method: 'POST',
                 headers: { 'X-CSRFToken': token },
                 body: formData,
+                redirect: 'manual',
             })
         } catch {
-            showLoginError('Palvelimeen ei saada yhteyttä')
-            return
+            return { ok: false, reason: 'network' }
         }
-
         csrftoken = null
 
-        if (!response.ok) {
-            showLoginError('Palvelimeen ei saada yhteyttä')
-            return
-        }
+        // Success is confirmed by an authenticated probe, never by the login
+        // POST's own status: a correct login 302-redirects, while a wrong one
+        // re-renders the browsable-API form with 200 — so the status is useless.
+        const { offline, response: probe } = await PiikkiOffline.apiFetch('../api/products/')
+        if (offline || !probe) return { ok: false, reason: 'network' }
+        if (!probe.ok) return { ok: false, reason: isAuthFailure(probe) ? 'credentials' : 'network' }
 
-        const { offline: prodOffline, response: prodResponse } = await PiikkiOffline.apiFetch('../api/products/')
-        if (prodOffline || !prodResponse || !prodResponse.ok) {
-            showLoginError(prodOffline
-                ? 'Palvelimeen ei saada yhteyttä'
-                : 'Väärä käyttäjätunnus tai salasana')
-            return
-        }
-        const products = await prodResponse.json()
+        const products = await probe.json()
         PiikkiOffline.setCache('products', products)
-        renderProducts(products)
+        return { ok: true, products }
+    }
 
+    // Coalesced silent re-auth: when stored credentials exist, transparently
+    // re-establish the session after it expires. Concurrent callers (several
+    // reads 403-ing at once, plus a buffered mutation) share one in-flight
+    // attempt — critical because re-auth and the queue sync both fetch CSRF, and
+    // running them concurrently against the cookie-less session races on the
+    // anonymous session cookie ("CSRF token incorrect"). So the queue is drained
+    // only here, AFTER the single login completes and the session is restored.
+    // Stale credentials are dropped so we don't keep retrying a dead password.
+    let reauthPromise = null
+    const trySilentReauth = () => {
+        const creds = PiikkiOffline.getCredentials()
+        if (!creds) return Promise.resolve(false)
+        if (!reauthPromise) {
+            reauthPromise = performLogin(creds.username, creds.password)
+                .then((result) => {
+                    if (!result.ok && result.reason === 'credentials') {
+                        PiikkiOffline.clearCredentials()
+                    }
+                    if (result.ok) PiikkiOffline.sync({ retryFailed: true })
+                    return result.ok
+                })
+                .catch(() => false)
+                .finally(() => { reauthPromise = null })
+        }
+        return reauthPromise
+    }
+
+    // React to a non-ok response on a read request. On an auth failure, try a
+    // silent re-login and re-run `retry` once; failing that (or with no stored
+    // credentials), show the login dialog. On any other failure, surface a toast
+    // and stay put — a transient server/proxy error must never log the operator
+    // out. Returns true only if the read ultimately succeeded via the retry.
+    const recoverFromFailure = async (response, retry) => {
+        if (isAuthFailure(response)) {
+            if (retry && await trySilentReauth()) return await retry()
+            // Only call it an expiry if there was actually a session to lose; a
+            // first-ever load just needs a clean login prompt, not a scare.
+            toLogin(PiikkiOffline.wasLoggedIn() ? 'Istunto vanhentunut — kirjaudu uudelleen' : null)
+            return false
+        }
+        PiikkiToast.show({ id: 'api-error', message: 'Palvelinvirhe — yritä uudelleen', variant: 'error', icon: 'error', duration: 5000 })
+        return false
+    }
+
+    // Classify a non-2xx mutation (purchase / session) response. 'auth' = an
+    // expired session or CSRF/cookie failure that re-login fixes; 'pin' = a
+    // wrong/locked PIN (a legitimate rejection, never recovered); 'error' =
+    // anything else. Reads a clone so the caller can still consume the body.
+    const classifyMutation = async (response) => {
+        if (!response) return { kind: 'error' }
+        if (response.status === 401 || response.status === 403) {
+            let body = {}
+            try { body = await response.clone().json() } catch {}
+            if (body.error === 'wrong_pin' || body.error === 'locked') return { kind: 'pin', body }
+            return { kind: 'auth', body }
+        }
+        return { kind: 'error' }
+    }
+
+    // Fire a batch of { tab, pin, item } purchase attempts in parallel. PINs are
+    // kept in memory only (never buffered), so an expired session is recovered
+    // by a single inline silent re-auth + retry of the not-yet-succeeded lines,
+    // not by queueing. client_uuid on each line makes the retry idempotent.
+    // Returns { ok: true } or { ok: false, kind: 'auth' | 'error' }.
+    const runPurchaseAttempts = async (attempts, allowReauth) => {
+        const token = await getCsrfToken()
+        const responses = await Promise.all(attempts.map(a => postPurchase(a.item, a.pin, token, a.tab)))
+        const failed = []
+        let authLapse = false
+        let otherError = false
+        for (let i = 0; i < responses.length; i++) {
+            if (responses[i].ok) continue
+            const cls = await classifyMutation(responses[i])
+            if (cls.kind === 'auth') { authLapse = true; failed.push(attempts[i]) }
+            else otherError = true
+        }
+        if (otherError) return { ok: false, kind: 'error' }
+        if (authLapse) {
+            if (allowReauth && await trySilentReauth()) {
+                csrftoken = null
+                return runPurchaseAttempts(failed, false)
+            }
+            return { ok: false, kind: 'auth' }
+        }
+        return { ok: true }
+    }
+
+    const handleLogin = async () => {
+        const username = document.querySelector('.login-panel input[name="username"]').value.trim()
+        const password = document.querySelector('.login-panel input[name="password"]').value
+        const remember = document.querySelector('#login-remember').checked
+
+        if (!username || !password) {
+            showLoginError('Anna käyttäjätunnus ja salasana')
+            return
+        }
+
+        showLoginError(null)
+        setLoginBusy(true)
+        const result = await performLogin(username, password)
+        setLoginBusy(false)
+
+        if (!result.ok) {
+            showLoginError(result.reason === 'credentials'
+                ? 'Väärä käyttäjätunnus tai salasana'
+                : 'Palvelimeen ei saada yhteyttä')
+            return
+        }
+
+        // Persist (or forget) credentials per the operator's choice. Used only
+        // for silent re-auth after a session expires; see trySilentReauth.
+        if (remember) PiikkiOffline.setCredentials(username, password)
+        else PiikkiOffline.clearCredentials()
+
+        renderProducts(result.products)
         PiikkiOffline.setLoggedIn(true)
         document.querySelector('.login-panel').classList.remove('active')
+        document.querySelector('#password').value = ''
         busy = false
+        // Drain anything buffered while the session was down (e.g. a purchase the
+        // operator made just before being prompted to log back in).
+        PiikkiOffline.sync({ retryFailed: true })
         updateActiveSession()
         fetchTabs()
+        fetchConfig()
         toMain()
     }
 
@@ -1034,16 +1207,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    const updateActiveSession = async () => {
+    const updateActiveSession = async (allowReauth = true) => {
         const { offline, response } = await PiikkiOffline.apiFetch('../api/sessions/active/')
         if (offline) {
             const cached = PiikkiOffline.getCache('session')
             renderActiveSession(cached)
             return true
         }
-        if(!checkResponse(response)) {
-            toLogin()
-            return false
+        if(!response.ok) {
+            return recoverFromFailure(response, allowReauth ? () => updateActiveSession(false) : null)
         }
         const session = await response.json()
         PiikkiOffline.setCache('session', session)
@@ -1103,10 +1275,26 @@ document.addEventListener("DOMContentLoaded", async () => {
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': await getCsrfToken() },
             body: JSON.stringify({ "tab": tabId })
         })
-        if (offline) {
+        // A 403 here means the session expired (the request was rejected before
+        // any DB write) — buffer the start exactly like an offline one and kick a
+        // sync, which silently re-auths and replays it. No data lost, no popup.
+        const lapsed = !offline && response && isAuthFailure(response)
+        if (offline || lapsed) {
             const item = PiikkiOffline.makeSessionStartItem(tabId, tabName)
             PiikkiOffline.enqueue(item)
             PiikkiOffline.setCache('session', { id: item.id, tab: tabId, tab_name: tabName, started_at: new Date().toISOString(), ended_at: null, total_host: 0, total_all: 0 })
+            if (lapsed) trySilentReauth()   // re-auth, then drain the queue (no CSRF race)
+            // Render the host from the cached buffered session, not a server
+            // fetch — the replay hasn't landed yet, so the server would still
+            // report "no active session" and clobber the indicator.
+            renderActiveSession(PiikkiOffline.getCache('session'))
+            closeSessionWindow()
+            return
+        }
+        if (!response.ok) {
+            PiikkiToast.show({ id: 'session-error', message: 'Hostauksen aloitus epäonnistui', variant: 'error', icon: 'error', duration: 5000 })
+            closeSessionWindow()
+            return
         }
         closeSessionWindow()
         updateActiveSession()
@@ -1146,21 +1334,29 @@ document.addEventListener("DOMContentLoaded", async () => {
             headers: { 'X-CSRFToken': await getCsrfToken(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ "people": people, "comment": comment })
         })
-        if (offline) {
+        // A 403 here means the session expired — buffer the end exactly like an
+        // offline one and kick a sync to silently re-auth and replay it.
+        const lapsed = !offline && response && isAuthFailure(response)
+        if (offline || lapsed) {
             PiikkiOffline.enqueue(PiikkiOffline.makeSessionEndItem(id, null, people, comment))
             PiikkiOffline.setCache('session', { id: null })
             peopleInput.value = ''
             commentInput.value = ''
-            updateActiveSession()
+            if (lapsed) trySilentReauth()   // re-auth, then drain the queue (no CSRF race)
+            // Render "no host" from cache, not a server fetch — the end replay
+            // hasn't landed, so the server would still report the session active.
+            renderActiveSession(PiikkiOffline.getCache('session'))
             closeSessionWindow()
             return
         }
-        if(checkResponse(response)) {
+        if(response.ok) {
             peopleInput.value = ''
             commentInput.value = ''
             updateActiveSession()
             fetchProducts()
             closeSessionWindow()
+        } else {
+            PiikkiToast.show({ id: 'session-error', message: 'Hostauksen lopetus epäonnistui', variant: 'error', icon: 'error', duration: 5000 })
         }
     }
 
@@ -1175,17 +1371,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.querySelector('#session-info').addEventListener('click', openSessionWindow)
 
     // Statistics panel functions
-    const openStatisticsWindow = async () => {
+    const openStatisticsWindow = async (allowReauth = true) => {
         document.querySelector('.statistics-panel').classList.add('active')
         document.querySelector('.statistics-panel').classList.add('opening')
         document.querySelector('.statistics-list-view').style = ''
         document.querySelector('.statistics-detail-view').style = 'display: none;'
 
         // Fetch all tabs
-        const response = await fetch('../api/tabs/all/')
-        if(!checkResponse(response)) {
-            toLogin()
-            return
+        const { offline, response } = await PiikkiOffline.apiFetch('../api/tabs/all/')
+        if (offline || !response.ok) {
+            if (!offline && await recoverFromFailure(response, allowReauth ? () => openStatisticsWindow(false) : null)) return true
+            if (offline) PiikkiToast.show({ id: 'api-error', message: 'Tilastot eivät ole käytettävissä offline-tilassa', variant: 'error', icon: 'error', duration: 5000 })
+            closeStatisticsWindow()
+            return false
         }
         const tabs = await response.json()
 
@@ -1215,13 +1413,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         })
 
         document.querySelector('.statistics-panel').classList.remove('opening')
+        return true
     }
 
-    const openTabDetail = async (tabId) => {
-        const response = await fetch(`../api/tabs/${tabId}/`)
-        if(!checkResponse(response)) {
-            toLogin()
-            return
+    const openTabDetail = async (tabId, allowReauth = true) => {
+        const { offline, response } = await PiikkiOffline.apiFetch(`../api/tabs/${tabId}/`)
+        if (offline || !response.ok) {
+            if (!offline) return recoverFromFailure(response, allowReauth ? () => openTabDetail(tabId, false) : null)
+            return false
         }
         const tab = await response.json()
 
@@ -1351,7 +1550,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // Send the entered PIN + desired setting to the server. On success the
     // toggle reflects the new value; otherwise the same wrong-attempt / locked
     // feedback as the checkout keypad is shown.
-    const submitStatisticsPin = async (pin) => {
+    const submitStatisticsPin = async (pin, allowReauth = true) => {
         const tab = statisticsPinTab
         if(!tab) return
         const token = await getCsrfToken()
@@ -1371,15 +1570,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             closeStatisticsPinPad()
             return
         }
-        // 403: wrong pin or locked
-        var body = {}
-        try {
-            body = await response.json()
-        } catch(e) {
-            body = {}
+        const cls = await classifyMutation(response)
+        if (cls.kind === 'auth') {
+            if (allowReauth && await trySilentReauth()) {
+                csrftoken = null
+                return submitStatisticsPin(pin, false)
+            }
+            toLogin('Istunto vanhentunut — kirjaudu uudelleen')
+            return
         }
+        // 403: wrong pin or locked
         statisticsEnteredPin = ''
-        applyPinError('#statistics-pinpad', tab, body)
+        applyPinError('#statistics-pinpad', tab, cls.body || {})
     }
 
     const closeStatisticsWindow = () => {
@@ -1428,7 +1630,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.querySelector('.checkout-panel .back').addEventListener('click', handleBackButton)
     document.querySelector('#multi-tab-toggle').addEventListener('click', toggleMultiTabMode)
 
-    document.querySelector('#login').addEventListener('click', handleLogin)
+    document.querySelector('#login-form').addEventListener('submit', (e) => {
+        e.preventDefault()
+        handleLogin()
+    })
 
     const updateMarker = (e) => {
         const pos = document.querySelector('.main-panel .product-column').scrollTop + 100
@@ -1508,7 +1713,14 @@ document.addEventListener("DOMContentLoaded", async () => {
                 updateActiveSession()
             }
         },
-        onLoginNeeded: () => {
+        onLoginNeeded: async () => {
+            // A queued mutation hit an auth failure on sync. Try to recover the
+            // session silently with stored credentials and re-drain the queue;
+            // only fall back to the login dialog if that fails.
+            if (await trySilentReauth()) {
+                PiikkiOffline.sync({ retryFailed: true })
+                return
+            }
             toLogin('Istunto vanhentunut — kirjaudu uudelleen')
         },
     })
@@ -1539,5 +1751,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         await fetchConfig()
         await updateActiveSession()
         toMain()
+    } else if (!document.querySelector('.login-panel').classList.contains('active')) {
+        // Initial load couldn't reach the app and recoverFromFailure didn't
+        // already raise the dialog (e.g. server/network error with nothing
+        // cached). At a cold start, login is the only way forward.
+        toLogin()
     }
 })

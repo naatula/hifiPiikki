@@ -7,6 +7,7 @@ const PiikkiOffline = (() => {
         config: 'piikki.cache.config',
         updatedAt: 'piikki.cache.updatedAt',
         loggedIn: 'piikki.loggedIn',
+        creds: 'piikki.creds',
     }
     const FETCH_TIMEOUT = 8000
 
@@ -40,6 +41,24 @@ const PiikkiOffline = (() => {
         else localStorage.removeItem(KEYS.loggedIn)
     }
     const wasLoggedIn = () => localStorage.getItem(KEYS.loggedIn) === '1'
+
+    // Opt-in credential storage for silent re-auth after a session expires on an
+    // always-on tablet. Stored in plaintext localStorage — only persisted when
+    // the operator ticks "Pysy kirjautuneena", and cleared once the password is
+    // proven stale (a re-auth that fails on bad credentials). The point of this
+    // is convenience on a single-purpose kiosk; use a dedicated POS account.
+    const setCredentials = (username, password) => {
+        localStorage.setItem(KEYS.creds, JSON.stringify({ username, password }))
+    }
+    const getCredentials = () => {
+        const raw = localStorage.getItem(KEYS.creds)
+        if (!raw) return null
+        try {
+            const c = JSON.parse(raw)
+            return (c && c.username) ? c : null
+        } catch { return null }
+    }
+    const clearCredentials = () => localStorage.removeItem(KEYS.creds)
 
     // Recompute UI + ping based on connectivity and queue contents. The offline
     // button stays visible while ANY buffered item remains (so failed leftovers
@@ -164,16 +183,22 @@ const PiikkiOffline = (() => {
 
     const getQueueSize = () => loadQueue().length
 
-    const makePurchaseItem = (body, productName, tabName) => ({
-        id: crypto.randomUUID(),
-        type: 'purchase',
-        body: { ...body, client_uuid: crypto.randomUUID(), occurred_at: new Date().toISOString() },
-        productName,
-        tabName,
-        occurredAt: new Date().toISOString(),
-        status: 'pending',
-        error: null,
-    })
+    const makePurchaseItem = (body, productName, tabName) => {
+        // Reuse a client_uuid already minted for an online attempt (so a line
+        // buffered after a mid-purchase failure replays under the same id and
+        // can't double-charge); mint a fresh one for a purely offline purchase.
+        const occurredAt = body.occurred_at || new Date().toISOString()
+        return {
+            id: crypto.randomUUID(),
+            type: 'purchase',
+            body: { ...body, client_uuid: body.client_uuid || crypto.randomUUID(), occurred_at: occurredAt },
+            productName,
+            tabName,
+            occurredAt,
+            status: 'pending',
+            error: null,
+        }
+    }
 
     const makeSessionStartItem = (tabId, tabName) => ({
         id: crypto.randomUUID(),
@@ -532,6 +557,9 @@ const PiikkiOffline = (() => {
         setCache,
         setLoggedIn,
         wasLoggedIn,
+        setCredentials,
+        getCredentials,
+        clearCredentials,
         getUpdatedAt,
         enqueue,
         makePurchaseItem,
