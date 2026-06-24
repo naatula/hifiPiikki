@@ -1302,6 +1302,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             closeSessionWindow()
             return
         }
+        const startData = await response.json()
+        if (startData.shelly_ok === false) {
+            PiikkiToast.show({ id: 'shelly-error', message: 'Ei yhteyttä katkaisijaan. Kytke sähkövirta katkaisijasta.', variant: 'error', icon: 'error', duration: 8000 })
+        }
         closeSessionWindow()
         updateActiveSession()
         fetchProducts()
@@ -1356,6 +1360,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             return
         }
         if(response.ok) {
+            const endData = await response.json()
+            if (endData.shelly_ok === true) {
+                PiikkiToast.show({ id: 'shelly-success', message: 'Hostaus lopetettu. Automaattinen virrankatkaisu 60s kuluttua.', variant: 'success', icon: 'success', duration: 8000 })
+            } else if (endData.shelly_ok === false) {
+                PiikkiToast.show({ id: 'shelly-error', message: 'Ei yhteyttä katkaisijaan. Kytke sähkövirta katkaisijasta.', variant: 'error', icon: 'error', duration: 8000 })
+            }
             peopleInput.value = ''
             commentInput.value = ''
             updateActiveSession()

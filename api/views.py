@@ -290,9 +290,12 @@ class SessionViewSet(viewsets.GenericViewSet):
             # Freshness of the event time — not client_uuid presence — marks a
             # replay, since online starts now also carry a client_uuid for
             # idempotency.
+            data = serializer.data
             if _is_live_event(serializer.instance.started_at):
-                turn_on_shelly()
-            return Response(serializer.data)
+                shelly_result = turn_on_shelly()
+                if shelly_result is not None:
+                    data['shelly_ok'] = shelly_result
+            return Response(data)
         return Response(serializer.errors)
 
     @action(detail=True, methods=['post'])
@@ -310,9 +313,12 @@ class SessionViewSet(viewsets.GenericViewSet):
         session.save()
         # See create(): gate the relay on event-time freshness, not client_uuid,
         # so a replayed historical end doesn't schedule a turn-off hours late.
+        data = SessionSerializer(session).data
         if _is_live_event(session.ended_at):
-            schedule_turn_off_shelly(60)
-        return Response(SessionSerializer(session).data)
+            shelly_result = schedule_turn_off_shelly(60)
+            if shelly_result is not None:
+                data['shelly_ok'] = shelly_result
+        return Response(data)
 
     @action(detail=False, methods=['get'])
     def active(self, request):

@@ -52,17 +52,17 @@ class ShellyCloudClient:
         except requests.exceptions.RequestException as e:
             raise ShellyCloudError(f"Request error: {e}")
 
-    def turn_on(self) -> bool:
+    def turn_on(self) -> Optional[bool]:
         """Turn on the Shelly device immediately
 
         This automatically cancels any existing scheduled turn-off operations.
         Used when starting a session session.
 
         Returns:
-            bool: True if successful or feature disabled, False on error
+            None if not configured, True if successful, False on error
         """
         if not self.enabled:
-            return True  # Return True to not break the session flow
+            return None
 
         try:
             data = {
@@ -79,7 +79,7 @@ class ShellyCloudClient:
             logger.error(f"Failed to turn ON Shelly device {self.device_id}: {e}")
             return False
 
-    def schedule_turn_off(self, delay_seconds: int = 60) -> bool:
+    def schedule_turn_off(self, delay_seconds: int = 60) -> Optional[bool]:
         """Schedule the device to turn off after a specified delay
 
         The device is first turned on, then scheduled to turn off after the delay.
@@ -90,10 +90,10 @@ class ShellyCloudClient:
             delay_seconds: Seconds to wait before turning off (default: 60)
 
         Returns:
-            bool: True if successful or feature disabled, False on error
+            None if not configured, True if successful, False on error
         """
         if not self.enabled:
-            return True  # Return True to not break the session flow
+            return None
 
         try:
             data = {
@@ -113,35 +113,29 @@ class ShellyCloudClient:
 
 
 # Convenience functions for use in views
-def turn_on_shelly() -> bool:
+def turn_on_shelly() -> Optional[bool]:
     """Turn on the Shelly device immediately and cancel any timers
 
-    Used when starting a session session to ensure the device is on
-    and cancel any pending turn-off operations.
-
     Returns:
-        bool: True if successful or feature disabled, False on error
+        None if not configured, True if successful, False on error
     """
     try:
         client = ShellyCloudClient()
         return client.turn_on()
     except Exception as e:
         logger.error(f"Failed to turn on Shelly device: {e}")
-        return True  # Return True to not break the session flow
+        return None
 
 
-def schedule_turn_off_shelly(delay_seconds: int = 60) -> bool:
+def schedule_turn_off_shelly(delay_seconds: int = 60) -> Optional[bool]:
     """Schedule the Shelly device to turn off after specified delay
 
-    Args:
-        delay_seconds: Seconds to wait before turning off (default: 60)
-
     Returns:
-        bool: True if successful or feature disabled, False on error
+        None if not configured, True if successful, False on error
     """
     try:
         client = ShellyCloudClient()
         return client.schedule_turn_off(delay_seconds)
     except Exception as e:
         logger.error(f"Failed to schedule Shelly device turn off: {e}")
-        return True  # Return True to not break the session flow
+        return None
