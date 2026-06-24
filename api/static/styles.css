@@ -316,6 +316,12 @@ h2 {
     justify-content: space-between;
 }
 
+.products .note {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .products .price {
     white-space: nowrap;
 }
