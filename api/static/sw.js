@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'piikki-v3.0'
+const CACHE_VERSION = 'piikki-v3.3'
 
 // Core shell: must ALL cache or the install aborts, leaving the previous
 // (working) service worker in control rather than activating a half-broken
@@ -26,10 +26,11 @@ const PRECACHE_OPTIONAL = [
 ]
 
 self.addEventListener('install', (event) => {
+    const bust = (url) => new Request(url, { cache: 'reload' })
     event.waitUntil(
         caches.open(CACHE_VERSION).then(async (cache) => {
-            await cache.addAll(PRECACHE_CRITICAL)
-            await Promise.allSettled(PRECACHE_OPTIONAL.map(u => cache.add(u)))
+            await cache.addAll(PRECACHE_CRITICAL.map(bust))
+            await Promise.allSettled(PRECACHE_OPTIONAL.map(u => cache.add(bust(u))))
         })
     )
 })
@@ -62,7 +63,7 @@ self.addEventListener('fetch', (event) => {
     if (event.request.mode === 'navigate') {
         event.respondWith((async () => {
             try {
-                const response = (await event.preloadResponse) || (await fetch(event.request))
+                const response = (await event.preloadResponse) || (await fetch(event.request, { cache: 'reload' }))
                 // Only cache a good shell — never let a 5xx error page overwrite
                 // the cached index that keeps the app usable offline.
                 if (response && response.ok) {
@@ -81,7 +82,7 @@ self.addEventListener('fetch', (event) => {
     if (event.request.method === 'GET') {
         event.respondWith(
             caches.match(event.request, { ignoreSearch: true }).then(cached => {
-                const networkFetch = fetch(event.request).then(response => {
+                const networkFetch = fetch(event.request, { cache: 'reload' }).then(response => {
                     if (response && response.ok) {
                         const clone = response.clone()
                         caches.open(CACHE_VERSION).then(cache => cache.put(event.request, clone))
