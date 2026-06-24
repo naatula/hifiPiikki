@@ -90,7 +90,7 @@ class Purchase(ParanoidModel):
     quantity = models.DecimalField(max_digits=10, decimal_places=2)
     total = models.DecimalField(max_digits=10, decimal_places=2)
     price_type = models.CharField(
-        max_length=3, choices=PRICE_TYPE_CHOICES, null=True, blank=True)
+        max_length=4, choices=PRICE_TYPE_CHOICES, null=True, blank=True)
     client_uuid = models.UUIDField(null=True, blank=True, unique=True)
     occurred_at = models.DateTimeField(default=timezone.now)
 
