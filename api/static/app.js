@@ -144,7 +144,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         document.querySelector('.login-panel').classList.add('active')
         if(message) {
-            document.querySelector('.login-panel p').innerHTML = message
+            PiikkiToast.show({ message, variant: 'error', icon: 'error', duration: 6000 })
         }
     }
 
@@ -348,11 +348,13 @@ document.addEventListener("DOMContentLoaded", async () => {
             } else {
                 busy = false
                 document.querySelector('#confirmation').classList.remove('ok')
-                const errorEl = document.querySelector('#purchase-error')
-                document.querySelector('#purchase-error .purchase-error-msg').innerHTML =
-                    'Oston kirjaaminen epäonnistui yhdelle tai useammalle piikille. Lataa sivu uudelleen, tarkista tilanne historiasta ja yritä uudestaan.'
-                errorEl.style.display = ''
-                errorEl.classList.add('active')
+                toMain()
+                PiikkiToast.show({
+                    id: 'purchase-error',
+                    message: 'Osto epäonnistui osalle piikkejä — tarkista tilanne historiasta',
+                    variant: 'error', icon: 'error', duration: 0, dismissible: true,
+                    actions: [{ label: 'Lataa uudelleen', primary: true, onClick: () => { location.reload() } }],
+                })
             }
         }, 500)
     }
@@ -440,10 +442,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                 } else {
                     busy = false
                     document.querySelector('#confirmation').classList.remove('ok')
-                    const errorEl = document.querySelector('#purchase-error')
-                    document.querySelector('#purchase-error .purchase-error-msg').innerHTML = 'Oston kirjaaminen epäonnistui. Lataa sivu uudelleen ja yritä uudestaan.'
-                    errorEl.style.display = ''
-                    errorEl.classList.add('active')
+                    toMain()
+                    PiikkiToast.show({
+                        id: 'purchase-error',
+                        message: 'Osto ei mennyt läpi — tarkista tilanne historiasta',
+                        variant: 'error', icon: 'error', duration: 0, dismissible: true,
+                        actions: [{ label: 'Lataa uudelleen', primary: true, onClick: () => { location.reload() } }],
+                    })
                 }
             } catch {
                 enqueuePurchaseItems(items, tab)
@@ -711,9 +716,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         setTimeout(() => {
             document.querySelector('#confirmation').classList.remove('ok')
             document.querySelector('#confirmation').classList.remove('pin-mode')
-            const purchaseError = document.querySelector('#purchase-error')
-            purchaseError.style.display = 'none'
-            purchaseError.classList.remove('active')
             enteredPin = ''
             document.querySelector('.checkout-panel main').scroll(0, 0)
             document.querySelector('.checkout-panel .tab-list').scroll(0, 0)
@@ -956,35 +958,65 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
 
+    const showLoginError = (msg) => {
+        PiikkiToast.show({ id: 'login-error', message: msg, variant: 'error', icon: 'error', duration: 6000 })
+    }
+
     const handleLogin = async () => {
-        // Log in using Django SessionAuthentication
-        const errorField = document.querySelector('.login-panel p')
         const username = document.querySelector('.login-panel input[name="username"]').value
         const password = document.querySelector('.login-panel input[name="password"]').value
         const formData = new FormData();
         formData.append('username', username);
         formData.append('password', password);
 
-        const request = fetch('../api/auth/login/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': await getCsrfToken()
-            },
-            body: formData
-        }).then(async (response) => {
-            csrftoken = null
-            if(await fetchProducts()) {
-                PiikkiOffline.setLoggedIn(true)
-                errorField.innerHTML = ''
-                document.querySelector('.login-panel').classList.remove('active')
-                busy = false
-                updateActiveSession()
-                fetchTabs()
-                toMain()
-            } else {
-                errorField.innerHTML = response.status == 200 ? 'Väärä käyttäjätunnus tai salasana?' : 'Palvelinvirhe?'
-            }
-        })
+        let token
+        try {
+            token = await getCsrfToken()
+        } catch {
+            showLoginError('Palvelimeen ei saada yhteyttä')
+            return
+        }
+        if (!token) {
+            showLoginError('Palvelimeen ei saada yhteyttä')
+            return
+        }
+
+        let response
+        try {
+            response = await fetch('../api/auth/login/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': token },
+                body: formData,
+            })
+        } catch {
+            showLoginError('Palvelimeen ei saada yhteyttä')
+            return
+        }
+
+        csrftoken = null
+
+        if (!response.ok) {
+            showLoginError('Palvelimeen ei saada yhteyttä')
+            return
+        }
+
+        const { offline: prodOffline, response: prodResponse } = await PiikkiOffline.apiFetch('../api/products/')
+        if (prodOffline || !prodResponse || !prodResponse.ok) {
+            showLoginError(prodOffline
+                ? 'Palvelimeen ei saada yhteyttä'
+                : 'Väärä käyttäjätunnus tai salasana')
+            return
+        }
+        const products = await prodResponse.json()
+        PiikkiOffline.setCache('products', products)
+        renderProducts(products)
+
+        PiikkiOffline.setLoggedIn(true)
+        document.querySelector('.login-panel').classList.remove('active')
+        busy = false
+        updateActiveSession()
+        fetchTabs()
+        toMain()
     }
 
     const renderActiveSession = (session) => {
@@ -1447,10 +1479,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         btn.classList.remove('disabled')
         btn.textContent = 'Synkronoi'
-        if (result.ok > 0 || result.failed > 0) {
-            const msg = `Onnistui: ${result.ok}, Epäonnistui: ${result.failed}`
-            const el = document.querySelector('.offline-queue-count')
-            if (el) el.textContent = msg
+        if (result.failed > 0) {
+            PiikkiToast.show({
+                id: 'sync-result',
+                message: `Synkronointi: ${result.ok} onnistui, ${result.failed} epäonnistui`,
+                variant: 'error', icon: 'error', duration: 6000,
+            })
+        } else if (result.ok > 0) {
+            PiikkiToast.show({
+                id: 'sync-result',
+                message: `${result.ok} ${result.ok === 1 ? 'toiminto' : 'toimintoa'} synkronoitu`,
+                variant: 'success', icon: 'success', duration: 4000,
+            })
         }
         if (PiikkiOffline.getQueueSize() === 0 && !PiikkiOffline.isOffline()) {
             closeOfflinePanel()
@@ -1469,7 +1509,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         },
         onLoginNeeded: () => {
-            toLogin('Kirjaudu sisään synkronoidaksesi')
+            toLogin('Istunto vanhentunut — kirjaudu uudelleen')
         },
     })
 
