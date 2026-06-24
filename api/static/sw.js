@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'piikki-v2.3'
+const CACHE_VERSION = 'piikki-v2.4'
 
 // Core shell: must ALL cache or the install aborts, leaving the previous
 // (working) service worker in control rather than activating a half-broken
@@ -8,6 +8,7 @@ const PRECACHE_CRITICAL = [
     './styles.css',
     './app.js',
     './offline.js',
+    './toast.js',
 ]
 
 // Best-effort extras: the app still runs offline without any single one of

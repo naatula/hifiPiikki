@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="app.webmanifest">
+    <script src="toast.js"></script>
     <script src="offline.js"></script>
     <script src="app.js"></script>
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -174,14 +175,7 @@
                 </div>
             </div>
         </div>
-<div class="update-toast" id="update-toast" style="display:none">
-            <span>Uusi versio saatavilla</span>
-            <button id="update-accept">Päivitä</button>
-        </div>
-        <div class="notice-toast" id="offline-ready-toast" style="display:none">
-            <span>Sovellus toimii nyt myös offline-tilassa.</span>
-        </div>
-    </div>
+</div>
 <script>
 if ('serviceWorker' in navigator) {
     // Captured before registration: was a worker already controlling this page?
@@ -189,18 +183,27 @@ if ('serviceWorker' in navigator) {
     // first install's clients.claim() (no reload needed — assets are fresh).
     const hadController = !!navigator.serviceWorker.controller
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
-        const showUpdateToast = () => {
-            const toast = document.getElementById('update-toast')
-            if (toast) toast.style.display = ''
-            document.getElementById('update-accept')?.addEventListener('click', () => {
-                reg.waiting?.postMessage('SKIP_WAITING')
+        // `worker` is captured at call time so the "Päivitä" button always posts
+        // to the right waiting worker rather than relying on a possibly-stale
+        // reg.waiting at click time. `id` dedupes if updatefound fires twice.
+        const showUpdateToast = (worker) => {
+            PiikkiToast.show({
+                id: 'sw-update',
+                variant: 'update',
+                message: 'Uusi versio saatavilla',
+                duration: 0,
+                actions: [{
+                    label: 'Päivitä',
+                    primary: true,
+                    onClick: () => { (worker || reg.waiting)?.postMessage('SKIP_WAITING') },
+                }],
             })
         }
-        if (reg.waiting) showUpdateToast()
+        if (reg.waiting) showUpdateToast(reg.waiting)
         reg.addEventListener('updatefound', () => {
             const sw = reg.installing
             sw?.addEventListener('statechange', () => {
-                if (sw.state === 'installed' && navigator.serviceWorker.controller) showUpdateToast()
+                if (sw.state === 'installed' && navigator.serviceWorker.controller) showUpdateToast(sw)
             })
         })
 
@@ -210,10 +213,12 @@ if ('serviceWorker' in navigator) {
         navigator.serviceWorker.ready.then(() => {
             if (localStorage.getItem('piikki.offlineReady')) return
             localStorage.setItem('piikki.offlineReady', '1')
-            const toast = document.getElementById('offline-ready-toast')
-            if (!toast) return
-            toast.style.display = ''
-            setTimeout(() => { toast.style.display = 'none' }, 5000)
+            PiikkiToast.show({
+                variant: 'success',
+                icon: 'offline',
+                message: 'Sovellus toimii nyt myös offline-tilassa.',
+                duration: 5000,
+            })
         })
     })
 
