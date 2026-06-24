@@ -1586,6 +1586,21 @@ footer {
     border-radius: .375rem;
 }
 
+/* Transient notice toast (e.g. "offline ready"), auto-dismissed */
+.notice-toast {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--grey1);
+    border: 1px solid var(--grey3);
+    border-radius: .75rem;
+    padding: .75rem 1rem;
+    z-index: 100;
+    font-size: .875rem;
+    animation: fadeIn .3s;
+}
+
 @media screen and (max-width: 759px) {
     /* Make navigation more compact */
     .navigation > a {

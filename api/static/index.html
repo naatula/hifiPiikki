@@ -178,9 +178,16 @@
             <span>Uusi versio saatavilla</span>
             <button id="update-accept">Päivitä</button>
         </div>
+        <div class="notice-toast" id="offline-ready-toast" style="display:none">
+            <span>Sovellus toimii nyt myös offline-tilassa.</span>
+        </div>
     </div>
 <script>
 if ('serviceWorker' in navigator) {
+    // Captured before registration: was a worker already controlling this page?
+    // Distinguishes a real update takeover (reload to get fresh assets) from the
+    // first install's clients.claim() (no reload needed — assets are fresh).
+    const hadController = !!navigator.serviceWorker.controller
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
         const showUpdateToast = () => {
             const toast = document.getElementById('update-toast')
@@ -196,7 +203,25 @@ if ('serviceWorker' in navigator) {
                 if (sw.state === 'installed' && navigator.serviceWorker.controller) showUpdateToast()
             })
         })
-        navigator.serviceWorker.addEventListener('controllerchange', () => location.reload())
+
+        // One-time "offline ready" confirmation, shown once the worker is active
+        // and the shell is precached, so whoever sets up the tablet knows it is
+        // safe to run without Wi-Fi. The flag keeps it to a single appearance.
+        navigator.serviceWorker.ready.then(() => {
+            if (localStorage.getItem('piikki.offlineReady')) return
+            localStorage.setItem('piikki.offlineReady', '1')
+            const toast = document.getElementById('offline-ready-toast')
+            if (!toast) return
+            toast.style.display = ''
+            setTimeout(() => { toast.style.display = 'none' }, 5000)
+        })
+    })
+
+    // Only reload when an updated worker takes over a page that was already
+    // controlled. On the first install, clients.claim() also fires this — but
+    // a reload there is pointless and would wipe the offline-ready toast.
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hadController) location.reload()
     })
 }
 </script>
