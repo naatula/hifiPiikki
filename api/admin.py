@@ -3,6 +3,8 @@ from django import forms
 from django.contrib import admin, messages
 from django.db import transaction
 from django.db.models import F, Q, Sum
+from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
 from collections import defaultdict
 from django.urls import path
 from decimal import Decimal, InvalidOperation
@@ -316,9 +318,103 @@ class PurchaseAdmin(MyModelAdmin):
                 ).update(stock_quantity=F('stock_quantity') + qty)
             super().delete_queryset(request, queryset)
 
+class SettingsForm(forms.Form):
+    KNOWN_KEYS = [
+        'cash_enabled', 'pin_lockout_threshold',
+        'shelly_cloud_server', 'shelly_cloud_key', 'shelly_cloud_device',
+    ]
+    TRUTHY = ('1', 'true', 'yes', 'on')
+
+    cash_enabled = forms.BooleanField(
+        required=False,
+        label='Käteismaksu käytössä',
+        help_text='Näyttää kassanäkymässä käteismaksuvaihtoehdon. Käteisostot kirjataan 0 € hintaan mutta vähentävät varastosaldoa.',
+    )
+    pin_lockout_threshold = forms.IntegerField(
+        required=False,
+        min_value=1,
+        label='PIN-lukitusraja',
+        help_text='Suurin sallittu epäonnistuneiden PIN-yritysten määrä ennen tilin lukitusta. Jätä tyhjäksi poistaaksesi lukituksen käytöstä.',
+    )
+    shelly_cloud_server = forms.URLField(
+        required=False,
+        label='Shelly Cloud -palvelin',
+        help_text='Shelly Cloud API -palvelimen osoite (esim. https://shelly-103-eu.shelly.cloud).',
+    )
+    shelly_cloud_key = forms.CharField(
+        required=False,
+        label='Shelly Cloud -avain',
+        help_text='Shelly Cloud -tunnistautumisavain (auth key).',
+    )
+    shelly_cloud_device = forms.CharField(
+        required=False,
+        label='Shelly-laitetunnus',
+        help_text='Ohjattavan Shelly-laitteen tunniste (device ID).',
+    )
+
+
 class SettingAdmin(MyModelAdmin):
-    list_display = ('key', 'value',)
-    search_fields = ('key',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        if request.method == 'POST':
+            form = SettingsForm(request.POST)
+            if form.is_valid():
+                self._save_settings(form.cleaned_data)
+                messages.success(request, 'Asetukset tallennettu.')
+                return HttpResponseRedirect(request.path)
+        else:
+            settings_dict = {
+                s.key: s.value
+                for s in Setting.objects.filter(key__in=SettingsForm.KNOWN_KEYS)
+            }
+            initial = {
+                'cash_enabled': str(settings_dict.get('cash_enabled', '')).strip().lower() in SettingsForm.TRUTHY,
+                'pin_lockout_threshold': self._parse_optional_int(settings_dict.get('pin_lockout_threshold', '')),
+                'shelly_cloud_server': settings_dict.get('shelly_cloud_server', ''),
+                'shelly_cloud_key': settings_dict.get('shelly_cloud_key', ''),
+                'shelly_cloud_device': settings_dict.get('shelly_cloud_device', ''),
+            }
+            form = SettingsForm(initial=initial)
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Asetukset',
+            'form': form,
+            'opts': self.model._meta,
+        }
+        return TemplateResponse(request, 'admin/api/setting/settings_form.html', context)
+
+    def _save_settings(self, cleaned_data):
+        mapping = {
+            'cash_enabled': 'true' if cleaned_data['cash_enabled'] else 'false',
+            'pin_lockout_threshold': str(cleaned_data['pin_lockout_threshold']) if cleaned_data['pin_lockout_threshold'] is not None else '',
+            'shelly_cloud_server': cleaned_data.get('shelly_cloud_server') or '',
+            'shelly_cloud_key': cleaned_data.get('shelly_cloud_key') or '',
+            'shelly_cloud_device': cleaned_data.get('shelly_cloud_device') or '',
+        }
+        for key, value in mapping.items():
+            try:
+                obj = Setting.objects_with_deleted.get(key=key)
+                obj.value = value
+                obj.deleted_at = None
+                obj.save()
+            except Setting.DoesNotExist:
+                Setting.objects.create(key=key, value=value)
+
+    @staticmethod
+    def _parse_optional_int(raw):
+        if raw is None or str(raw).strip() == '':
+            return None
+        try:
+            return int(str(raw).strip())
+        except (ValueError, TypeError):
+            return None
 
 class SessionAdmin(MyModelAdmin):
     list_display = ('tab', 'started_at', 'ended_at', 'people', 'comment',)

@@ -1,0 +1,83 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+{% endblock %}
+
+{% block title %}Asetukset | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; Asetukset
+</div>
+{% endblock %}
+
+{% block content %}
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  {% if form.errors %}
+  <p class="errornote">Korjaa alla olevat virheet.</p>
+  {{ form.non_field_errors }}
+  {% endif %}
+
+  <fieldset class="module aligned">
+    <h2>Yleiset asetukset</h2>
+
+    <div class="form-row{% if form.cash_enabled.errors %} errors{% endif %}">
+      {{ form.cash_enabled.errors }}
+      <div>
+        {{ form.cash_enabled }}
+        <label for="{{ form.cash_enabled.id_for_label }}" class="vCheckboxLabel">{{ form.cash_enabled.label }}</label>
+      </div>
+      {% if form.cash_enabled.help_text %}<div class="help">{{ form.cash_enabled.help_text }}</div>{% endif %}
+    </div>
+
+    <div class="form-row{% if form.pin_lockout_threshold.errors %} errors{% endif %}">
+      {{ form.pin_lockout_threshold.errors }}
+      <div>
+        {{ form.pin_lockout_threshold.label_tag }}
+        {{ form.pin_lockout_threshold }}
+      </div>
+      {% if form.pin_lockout_threshold.help_text %}<div class="help">{{ form.pin_lockout_threshold.help_text }}</div>{% endif %}
+    </div>
+  </fieldset>
+
+  <fieldset class="module aligned">
+    <h2>Shelly-integraatio</h2>
+
+    <div class="form-row{% if form.shelly_cloud_server.errors %} errors{% endif %}">
+      {{ form.shelly_cloud_server.errors }}
+      <div>
+        {{ form.shelly_cloud_server.label_tag }}
+        {{ form.shelly_cloud_server }}
+      </div>
+      {% if form.shelly_cloud_server.help_text %}<div class="help">{{ form.shelly_cloud_server.help_text }}</div>{% endif %}
+    </div>
+
+    <div class="form-row{% if form.shelly_cloud_key.errors %} errors{% endif %}">
+      {{ form.shelly_cloud_key.errors }}
+      <div>
+        {{ form.shelly_cloud_key.label_tag }}
+        {{ form.shelly_cloud_key }}
+      </div>
+      {% if form.shelly_cloud_key.help_text %}<div class="help">{{ form.shelly_cloud_key.help_text }}</div>{% endif %}
+    </div>
+
+    <div class="form-row{% if form.shelly_cloud_device.errors %} errors{% endif %}">
+      {{ form.shelly_cloud_device.errors }}
+      <div>
+        {{ form.shelly_cloud_device.label_tag }}
+        {{ form.shelly_cloud_device }}
+      </div>
+      {% if form.shelly_cloud_device.help_text %}<div class="help">{{ form.shelly_cloud_device.help_text }}</div>{% endif %}
+    </div>
+  </fieldset>
+
+  <div class="submit-row">
+    <input type="submit" value="Tallenna" class="default">
+  </div>
+</form>
+{% endblock %}
