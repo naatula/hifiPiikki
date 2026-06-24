@@ -89,7 +89,7 @@ class PurchaseViewSet(viewsets.GenericViewSet):
                     pk=purchase.product_id, stock_quantity__isnull=False
                 ).update(stock_quantity=F('stock_quantity') - serializer.validated_data['quantity'])
             return Response(serializer.data)
-        return Response(serializer.errors)
+        return Response(serializer.errors, status=400)
     def list(self, request):
         return Response(PurchaseSerializer(
             Purchase.objects.filter(

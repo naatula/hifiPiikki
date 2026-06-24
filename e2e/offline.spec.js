@@ -1,28 +1,104 @@
-// SCAFFOLD — offline/PWA behaviour. Simulate an outage by aborting /api/ routes
-// (and/or context.setOffline) rather than clearing cookies (that is auth-expiry,
-// covered in expiry-recovery.spec.js). The connectivity probe hits GET /api/csrf/.
-const { test } = require('@playwright/test')
+const { test, expect } = require('@playwright/test')
 const h = require('./helpers')
 
 test.describe('Offline mode', () => {
-  test.beforeEach(() => { h.seed('reset') })
+  test.beforeEach(async ({ context }) => {
+    h.seed('reset')
+    await h.blockPopstate(context)
+  })
 
-  // While offline, a purchase is queued (sound on queue), the red offline button
-  // shows with a pending count, and isOffline() stays true.
-  test.fixme('a purchase made offline is queued', async ({ page, context }) => {})
+  test('a purchase made offline is queued', async ({ page }) => {
+    await h.login(page)
+    await h.goOffline(page)
+    await h.startPurchase(page)
+    await h.selectCheckoutTab(page)
+    await h.confirmPurchase(page)
+    await expect(page.locator('.main-panel')).toHaveClass(/active/, { timeout: 10_000 })
+    const q = await h.queue(page)
+    expect(q.length).toBe(1)
+    expect(q[0].status).toBe('pending')
+    await expect(page.locator('#offline-button')).toBeVisible()
+    expect(h.countPurchases()).toBe(0)
+  })
 
-  // Restore connectivity -> the queue replays automatically and drains; the
-  // purchase is persisted exactly once.
-  test.fixme('the queue syncs and drains when connectivity returns', async ({ page, context }) => {})
+  test('the queue syncs and drains when connectivity returns', async ({ page }) => {
+    await h.login(page)
+    await h.goOffline(page)
+    await h.startPurchase(page)
+    await h.selectCheckoutTab(page)
+    await h.confirmPurchase(page)
+    await expect(page.locator('.main-panel')).toHaveClass(/active/, { timeout: 10_000 })
+    expect((await h.queue(page)).length).toBe(1)
+    expect(h.countPurchases()).toBe(0)
 
-  // Offline restrictions: PIN-protected tabs are non-selectable, the statistics
-  // panel is unreachable.
-  test.fixme('PIN tabs are non-selectable and statistics is unreachable offline', async ({ page, context }) => {})
+    await h.goOnline(page)
+    await page.evaluate(() => PiikkiOffline.sync())
+    await h.expectQueueEmpty(page)
+    expect(h.countPurchases()).toBe(1)
+  })
 
-  // Offline state survives a page reload (the queue persists in localStorage).
-  test.fixme('offline state and queue survive a reload', async ({ page, context }) => {})
+  test('PIN tabs are non-selectable and statistics is unreachable offline', async ({ page }) => {
+    await h.login(page)
+    await h.goOffline(page)
+    await h.startPurchase(page)
+    await expect(
+      page.locator('.checkout-panel .tab-list .tabs > div', { hasText: h.PIN_TAB }).first()
+    ).toHaveClass(/pin-disabled/)
+    await page.locator('.checkout-panel .back').click()
+    await expect(page.locator('.main-panel')).toHaveClass(/active/)
+    await expect(page.locator('#statistics-button')).not.toBeVisible()
+    await expect(page.locator('#offline-button')).toBeVisible()
+  })
 
-  // A failed (4xx) queued item becomes "failed", is individually dismissable,
-  // and is not hammered by the periodic ping.
-  test.fixme('a permanently-rejected item is marked failed and dismissable', async ({ page, context }) => {})
+  test('offline state and queue survive a reload', async ({ page }) => {
+    await h.login(page)
+    await h.goOffline(page)
+    await h.startPurchase(page)
+    await h.selectCheckoutTab(page)
+    await h.confirmPurchase(page)
+    await expect(page.locator('.main-panel')).toHaveClass(/active/, { timeout: 10_000 })
+    expect((await h.queue(page)).length).toBe(1)
+
+    await h.goOffline(page)
+    await page.reload()
+    await expect(page.locator('.main-panel')).toHaveClass(/active/, { timeout: 10_000 })
+    const q = await h.queue(page)
+    expect(q.length).toBe(1)
+    await expect(page.locator('#offline-button')).toBeVisible()
+    expect(h.countPurchases()).toBe(0)
+  })
+
+  test('a permanently-rejected item is marked failed and dismissable', async ({ page }) => {
+    await h.login(page)
+    await page.evaluate(() => {
+      PiikkiOffline.enqueue(PiikkiOffline.makePurchaseItem(
+        { tab: 999999, quantity: 1, total: '3.00', product: null },
+        'Fake', 'Fake Tab'
+      ))
+    })
+    expect((await h.queue(page)).length).toBe(1)
+
+    await page.evaluate(async () => {
+      const poll = () => new Promise(r => setTimeout(r, 200))
+      for (let i = 0; i < 10; i++) {
+        const result = await PiikkiOffline.sync()
+        if (result.ran) return result
+        await poll()
+      }
+    })
+    await expect.poll(
+      async () => (await h.queue(page)).find(i => i.status === 'failed'),
+      { timeout: 10_000 }
+    ).toBeTruthy()
+
+    await expect(page.locator('#offline-button')).toBeVisible()
+    await page.locator('#offline-button').click()
+    await expect(page.locator('.offline-panel')).toHaveClass(/active/)
+    await expect(page.locator('.offline-queue-item.failed')).toBeVisible()
+    await expect(page.locator('.offline-item-dismiss')).toBeVisible()
+
+    await page.locator('.offline-item-dismiss').click()
+    await expect(page.locator('.offline-queue-item')).toHaveCount(0)
+    expect((await h.queue(page)).length).toBe(0)
+  })
 })

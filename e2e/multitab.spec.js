@@ -1,20 +1,53 @@
-// SCAFFOLD — multi-tab purchase flows. Needs a second non-PIN tab fixture
-// (extend e2e/seed.py baseline() with e.g. "E2E Testi 2" before implementing).
-const { test } = require('@playwright/test')
+const { test, expect } = require('@playwright/test')
 const h = require('./helpers')
 
 test.describe('Multi-tab purchases', () => {
-  test.beforeEach(() => { h.seed('reset') })
+  test.beforeEach(async ({ context }) => {
+    h.seed('reset')
+    await h.blockPopstate(context)
+  })
 
-  // Toggle #multi-tab-toggle, select two non-PIN tabs, confirm -> a purchase is
-  // recorded for each tab; assert countPurchases() === 2.
-  test.fixme('one purchase splits across several selected tabs', async ({ page }) => {})
+  test('one purchase splits across several selected tabs', async ({ page }) => {
+    await h.login(page)
+    await h.startPurchase(page)
+    await page.locator('#multi-tab-toggle').click()
+    await expect(page.locator('#multi-tab-toggle')).toHaveClass(/active/)
+    await page.locator('.checkout-panel .tab-list .tabs > div', { hasText: h.TAB }).first().click()
+    await page.locator('.checkout-panel .tab-list .tabs > div', { hasText: h.TAB2 }).first().click()
+    await h.confirmPurchase(page)
+    await expect(page.locator('.main-panel')).toHaveClass(/active/, { timeout: 10_000 })
+    expect(h.countPurchases()).toBe(2)
+  })
 
-  // Include a PIN tab in the selection (verify its PIN first), confirm -> all
-  // tabs charged.
-  test.fixme('multi-tab purchase including a PIN tab', async ({ page }) => {})
+  test('multi-tab purchase including a PIN tab', async ({ page }) => {
+    await h.login(page)
+    await h.startPurchase(page)
+    await page.locator('#multi-tab-toggle').click()
+    await expect(page.locator('#multi-tab-toggle')).toHaveClass(/active/)
+    await page.locator('.checkout-panel .tab-list .tabs > div', { hasText: h.TAB }).first().click()
+    await page.locator('.checkout-panel .tab-list .tabs > div', { hasText: h.PIN_TAB }).first().click()
+    await expect(page.locator('#confirmation')).toHaveClass(/pin-mode/)
+    await h.enterPin(page, h.PIN_CODE)
+    await expect(page.locator('#confirmation')).not.toHaveClass(/pin-mode/, { timeout: 5_000 })
+    await h.confirmPurchase(page)
+    await expect(page.locator('.main-panel')).toHaveClass(/active/, { timeout: 10_000 })
+    expect(h.countPurchases()).toBe(2)
+  })
 
-  // Expire the session mid multi-tab purchase -> recovers via inline re-auth +
-  // retry (PINs in memory), each tab charged exactly once, no login dialog.
-  test.fixme('multi-tab purchase recovers when the session expires', async ({ page, context }) => {})
+  test('multi-tab purchase recovers when the session expires', async ({ page, context }) => {
+    await h.login(page, { remember: true })
+    await h.startPurchase(page)
+    await page.locator('#multi-tab-toggle').click()
+    await page.locator('.checkout-panel .tab-list .tabs > div', { hasText: h.TAB }).first().click()
+    await page.locator('.checkout-panel .tab-list .tabs > div', { hasText: h.TAB2 }).first().click()
+
+    await h.expireSession(context)
+    await h.confirmPurchase(page)
+
+    await expect.poll(() => h.countPurchases(), { timeout: 15_000 }).toBe(2)
+    await h.expectQueueEmpty(page)
+    await page.waitForTimeout(500)
+    expect(h.countPurchases()).toBe(2)
+    expect(await h.loginShown(page)).toBe(false)
+  })
 })

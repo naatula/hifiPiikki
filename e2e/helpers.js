@@ -11,8 +11,10 @@ const USER = 'claude'
 const PASSWORD = 'claude'
 const PRODUCT = 'E2E Olut'
 const TAB = 'E2E Testi'        // non-PIN tab
+const TAB2 = 'E2E Testi 2'    // second non-PIN tab (for multi-tab tests)
 const PIN_TAB = 'E2E PIN'      // PIN-protected tab
 const PIN_CODE = '123456'
+const PIN_LOCKOUT_THRESHOLD = 3
 
 // Run a seed.py command and return its trimmed stdout (e.g. seed('reset'),
 // Number(seed('purchase-count'))).
@@ -22,6 +24,8 @@ function seed(...args) {
 const countPurchases = () => Number(seed('purchase-count'))
 const countSessions = () => Number(seed('session-count'))
 const countActiveSessions = () => Number(seed('active-session-count'))
+const tabBalance = (name) => parseFloat(seed('tab-balance', name))
+const pinAttempts = (name) => Number(seed('pin-attempts', name))
 
 // localStorage probes.
 const queue = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('piikki.queue') || '[]'))
@@ -52,6 +56,13 @@ async function selectCheckoutTab(page, tab = TAB) {
 }
 const confirmPurchase = (page) => page.locator('#confirmation .button').click()
 
+// Type a 6-digit PIN on whichever keypad is visible.
+async function enterPin(page, pin, selector = '#pinpad') {
+  for (const digit of pin) {
+    await page.locator(`${selector} .pin-key[data-digit="${digit}"]`).click()
+  }
+}
+
 // Wait until the offline queue has fully drained (recovery complete).
 async function expectQueueEmpty(page, timeout = 15_000) {
   await expect
@@ -59,9 +70,28 @@ async function expectQueueEmpty(page, timeout = 15_000) {
     .toBe(0)
 }
 
+// Block all /api/ requests to simulate offline.
+async function goOffline(page) {
+  await page.route('**/api/**', route => route.abort('connectionrefused'))
+}
+
+async function goOnline(page) {
+  await page.unroute('**/api/**')
+}
+
+// Chromium automation fires a spurious popstate event that races with
+// PiikkiBack's history-based overlay tracking, closing panels immediately
+// after they open. Call before login on tests that open overlay panels.
+async function blockPopstate(context) {
+  await context.addInitScript(() => {
+    window.addEventListener('popstate', e => e.stopImmediatePropagation(), true)
+  })
+}
+
 module.exports = {
-  USER, PASSWORD, PRODUCT, TAB, PIN_TAB, PIN_CODE,
-  seed, countPurchases, countSessions, countActiveSessions,
+  USER, PASSWORD, PRODUCT, TAB, TAB2, PIN_TAB, PIN_CODE, PIN_LOCKOUT_THRESHOLD,
+  seed, countPurchases, countSessions, countActiveSessions, tabBalance, pinAttempts,
   queue, storedCreds, loginShown, expireSession,
-  login, startPurchase, selectCheckoutTab, confirmPurchase, expectQueueEmpty,
+  login, startPurchase, selectCheckoutTab, confirmPurchase, enterPin,
+  expectQueueEmpty, goOffline, goOnline, blockPopstate,
 }

@@ -47,16 +47,17 @@ concurrent writes break the exact row-count assertions.
 | `expiry-recovery.spec.js` | ✅ | the regression guard — purchase / session start / session end while the session expires; buffered → re-authed → replayed once, no double-charge |
 | `purchases.spec.js` | ✅ | single + custom-amount purchase happy paths |
 | `sessions.spec.js` | ✅ | start + end a host session |
-| `pin.spec.js` | 🚧 scaffold | PIN purchase (correct/wrong/locked), PIN-tab expiry recovery, set_pin_required |
-| `multitab.spec.js` | 🚧 scaffold | multi-tab split, with-PIN, expiry recovery (needs a 2nd tab fixture) |
-| `statistics.spec.js` | 🚧 scaffold | tab list, detail, balance adjustment |
-| `offline.spec.js` | 🚧 scaffold | queue offline, sync on reconnect, offline restrictions, persistence, failed-item handling |
-
-Scaffolds are `test.fixme(...)` — they show up as todo and don't run until filled in.
+| `pin.spec.js` | ✅ | PIN purchase (correct/wrong/locked), PIN-tab expiry recovery, set_pin_required |
+| `multitab.spec.js` | ✅ | multi-tab split, with-PIN, expiry recovery |
+| `statistics.spec.js` | ✅ | tab list, detail, balance adjustment |
+| `offline.spec.js` | ✅ | queue offline, sync on reconnect, offline restrictions, persistence, failed-item handling |
 
 ## Helpers (`helpers.js`)
 
 - `login(page, { remember })`, `startPurchase`, `selectCheckoutTab`, `confirmPurchase`
+- `enterPin(page, pin, selector)` — types a 6-digit PIN on whichever keypad is visible
+- `goOffline(page)` / `goOnline(page)` — route-level network simulation (aborts `/api/**`)
 - `expireSession(context)` — drops cookies to simulate a server-side session expiry (an auth lapse, not an offline outage)
 - `expectQueueEmpty(page)` — waits for the offline queue to drain (recovery done)
-- `seed(...)`, `countPurchases()`, `countSessions()`, `countActiveSessions()` — server-side assertions via `seed.py`
+- `blockPopstate(context)` — neutralises Chromium's spurious popstate events that close PiikkiBack-tracked overlay panels
+- `seed(...)`, `countPurchases()`, `countSessions()`, `countActiveSessions()`, `tabBalance(name)`, `pinAttempts(name)` — server-side assertions via `seed.py`

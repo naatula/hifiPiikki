@@ -2,7 +2,10 @@ const { test, expect } = require('@playwright/test')
 const h = require('./helpers')
 
 test.describe('Purchases (happy path)', () => {
-  test.beforeEach(() => { h.seed('reset') })
+  test.beforeEach(async ({ context }) => {
+    h.seed('reset')
+    await h.blockPopstate(context)
+  })
 
   test('a single product purchase is recorded once', async ({ page }) => {
     await h.login(page)

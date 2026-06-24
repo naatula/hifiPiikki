@@ -13,6 +13,7 @@ Commands:
     session-count        Print the number of (live) sessions.
     active-session-count Print the number of sessions with ended_at IS NULL.
     tab-balance <name>   Print a tab's balance.
+    pin-attempts <name>  Print a tab's pin_attempts count.
 
 Only touches the database (models), so it is independent of DEBUG /
 FORCE_SCRIPT_NAME / .env routing config.
@@ -28,7 +29,7 @@ import django  # noqa: E402
 django.setup()
 
 from django.contrib.auth.models import User  # noqa: E402
-from api.models import Tab, Product, ProductGroup, Session, Purchase  # noqa: E402
+from api.models import Tab, Product, ProductGroup, Session, Purchase, Setting  # noqa: E402
 
 try:
     from safedelete.models import HARD_DELETE
@@ -38,10 +39,12 @@ except Exception:  # pragma: no cover - depends on soft-delete backend
 USERNAME = "claude"
 PASSWORD = "claude"
 NONPIN_TAB = "E2E Testi"
+NONPIN_TAB2 = "E2E Testi 2"
 PIN_TAB = "E2E PIN"
 PIN_CODE = "123456"
 PRODUCT = "E2E Olut"
 GROUP = "E2E Juomat"
+PIN_LOCKOUT_THRESHOLD = 3
 
 
 def _all(model):
@@ -61,7 +64,6 @@ def baseline():
     if not User.objects.filter(username=USERNAME).exists():
         User.objects.create_superuser(USERNAME, "", PASSWORD)
     group, _ = ProductGroup.objects.get_or_create(name=GROUP, defaults={"order": 1})
-    # Equal in/out price -> a single "Määrä" quantity input (default 1) in checkout.
     Product.objects.get_or_create(
         name=PRODUCT,
         defaults={"price_in": "3.00", "price_out": "3.00", "group": group, "in_stock": True},
@@ -71,8 +73,16 @@ def baseline():
         defaults={"balance": "0.00", "active": True, "pin_required": False},
     )
     Tab.objects.get_or_create(
+        name=NONPIN_TAB2,
+        defaults={"balance": "0.00", "active": True, "pin_required": False},
+    )
+    Tab.objects.get_or_create(
         name=PIN_TAB,
         defaults={"balance": "0.00", "active": True, "pin_required": True, "pin": PIN_CODE},
+    )
+    Setting.objects.update_or_create(
+        key="pin_lockout_threshold",
+        defaults={"value": str(PIN_LOCKOUT_THRESHOLD)},
     )
     print("baseline ok")
 
@@ -80,7 +90,12 @@ def baseline():
 def reset():
     _hard(_all(Purchase))
     _hard(_all(Session))
-    Tab.objects.filter(name__in=[NONPIN_TAB, PIN_TAB]).update(balance="0.00", pin_attempts=0)
+    Tab.objects.filter(name__in=[NONPIN_TAB, NONPIN_TAB2]).update(
+        balance="0.00", pin_attempts=0, pin_required=False
+    )
+    Tab.objects.filter(name=PIN_TAB).update(
+        balance="0.00", pin_attempts=0, pin_required=True
+    )
     print("reset ok")
 
 
@@ -99,6 +114,9 @@ def main(argv):
     elif cmd == "tab-balance":
         tab = Tab.objects.filter(name=argv[2]).first()
         print(tab.balance if tab else "NA")
+    elif cmd == "pin-attempts":
+        tab = Tab.objects.filter(name=argv[2]).first()
+        print(tab.pin_attempts if tab else "NA")
     else:
         print("unknown command: %s" % cmd, file=sys.stderr)
         sys.exit(1)

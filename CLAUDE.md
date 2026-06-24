@@ -22,6 +22,19 @@ python manage.py runserver
 
 No need to run collectstatic in dev — static files are served directly from the app.
 
+## E2E tests
+
+Browser tests that drive the real SPA against a running Django dev server (Playwright starts it automatically). Run from the `e2e/` directory:
+
+```bash
+cd e2e
+npm test            # headless
+npm run test:headed # visible browser
+npm run report      # open the last HTML report
+```
+
+Tests run serially (`workers: 1`) and share one SQLite dev DB — don't run anything else against the same server/DB while the suite runs.
+
 ## Production deploy
 
 After each deploy, run before restarting the app server:

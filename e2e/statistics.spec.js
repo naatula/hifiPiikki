@@ -1,16 +1,45 @@
-// SCAFFOLD — statistics panel (tab list, detail, adjustments).
-const { test } = require('@playwright/test')
+const { test, expect } = require('@playwright/test')
 const h = require('./helpers')
 
 test.describe('Statistics', () => {
-  test.beforeEach(() => { h.seed('reset') })
+  test.beforeEach(async ({ context }) => {
+    h.seed('reset')
+    await h.blockPopstate(context)
+  })
 
-  // Click #statistics-button -> list shows the e2e tabs with balances.
-  test.fixme('lists all tabs with balances', async ({ page }) => {})
+  test('lists all tabs with balances', async ({ page }) => {
+    await h.login(page)
+    await page.locator('#statistics-button').click()
+    await expect(page.locator('.statistics-panel')).toHaveClass(/active/)
+    await expect(page.locator('.statistics-tabs > div', { hasText: h.TAB }).first()).toBeVisible()
+    await expect(page.locator('.statistics-tabs > div', { hasText: h.PIN_TAB })).toBeVisible()
+    await expect(page.locator('.statistics-tabs .tab-balance').first()).toBeVisible()
+  })
 
-  // Open a tab -> detail view shows name, status, balance, purchase history.
-  test.fixme('opens a tab detail view', async ({ page }) => {})
+  test('opens a tab detail view', async ({ page }) => {
+    await h.login(page)
+    await page.locator('#statistics-button').click()
+    await expect(page.locator('.statistics-panel')).toHaveClass(/active/)
+    await page.locator('.statistics-tabs > div', { hasText: h.TAB }).first().click()
+    await expect(page.locator('.statistics-detail-view')).toBeVisible()
+    await expect(page.locator('#statistics-tab-name')).toHaveText(h.TAB)
+    await expect(page.locator('#statistics-tab-status')).toContainText('Käytössä')
+    await expect(page.locator('#statistics-tab-balance')).toContainText('€')
+  })
 
-  // Apply a balance adjustment from the detail view -> balance updates.
-  test.fixme('adjusts a tab balance', async ({ page }) => {})
+  test('adjusts a tab balance', async ({ page }) => {
+    await h.login(page)
+    await h.startPurchase(page)
+    await h.selectCheckoutTab(page)
+    await h.confirmPurchase(page)
+    await expect(page.locator('.main-panel')).toHaveClass(/active/, { timeout: 10_000 })
+    expect(h.countPurchases()).toBe(1)
+
+    await page.locator('#statistics-button').click()
+    await expect(page.locator('.statistics-panel')).toHaveClass(/active/)
+    await page.locator('.statistics-tabs > div', { hasText: h.TAB }).first().click()
+    await expect(page.locator('.statistics-detail-view')).toBeVisible()
+    await expect(page.locator('#statistics-tab-balance')).toContainText('-')
+    await expect(page.locator('.statistics-purchases > div').first()).toContainText(h.PRODUCT)
+  })
 })

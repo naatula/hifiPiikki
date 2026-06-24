@@ -11,7 +11,10 @@ const h = require('./helpers')
 const POLL = { timeout: 15_000 }
 
 test.describe('Mutation recovery on session expiry', () => {
-  test.beforeEach(() => { h.seed('reset') })
+  test.beforeEach(async ({ context }) => {
+    h.seed('reset')
+    await h.blockPopstate(context)
+  })
 
   test('a purchase made as the session expires is buffered, re-authed and charged exactly once', async ({ page, context }) => {
     await h.login(page, { remember: true })
