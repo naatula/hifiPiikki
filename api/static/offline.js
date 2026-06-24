@@ -4,6 +4,7 @@ const PiikkiOffline = (() => {
         tabs: 'piikki.cache.tabs',
         products: 'piikki.cache.products',
         session: 'piikki.cache.session',
+        config: 'piikki.cache.config',
         updatedAt: 'piikki.cache.updatedAt',
         loggedIn: 'piikki.loggedIn',
     }

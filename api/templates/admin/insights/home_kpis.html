@@ -45,4 +45,27 @@
       <span class="kpi__label">Net balance</span>
     </div>
   </div>
+
+  {% if kpis.low_stock %}
+  <div class="low-stock">
+    <div class="low-stock__head">
+      <h2 class="low-stock__title">Low stock</h2>
+      <a class="period period--active" href="{% url 'admin:api_product_manage_quantities' %}">Manage quantities &rsaquo;</a>
+    </div>
+    <table class="low-stock__table">
+      <thead>
+        <tr><th>Product</th><th>In stock</th><th>Threshold</th></tr>
+      </thead>
+      <tbody>
+        {% for p in kpis.low_stock %}
+        <tr>
+          <td>{{ p.name }}</td>
+          <td>{{ p.stock_quantity|floatformat:"-2" }}</td>
+          <td>{{ p.low_stock_threshold|floatformat:"-2" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
 </div>

@@ -2,10 +2,10 @@ import json
 from django import forms
 from django.contrib import admin, messages
 from django.db import transaction
-from django.db.models import F, Sum
+from django.db.models import F, Q, Sum
 from collections import defaultdict
 from django.urls import path
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django_paranoid.admin import ParanoidAdmin
 from . import analytics
 from .models import Tab, ProductGroup, Product, Purchase, Setting, Session, TabAdjustment
@@ -185,17 +185,90 @@ class ProductGroupAdmin(MyModelAdmin):
     ordering = ('order',)
 
 class ProductAdmin(MyModelAdmin):
-    list_display = ('name', 'price_in', 'price_out', 'group', 'in_stock',)
+    list_display = ('name', 'price_in', 'price_out', 'group', 'in_stock', 'stock_quantity', 'low_stock_threshold',)
     list_filter = ('group', 'in_stock', 'group__name',)
     search_fields = ('name',)
     ordering = ('name',)
     actions = ['set_in_stock', 'set_out_of_stock']
+    change_list_template = 'admin/api/product/change_list.html'
+
     @admin.action(description='Set in stock', permissions=['change'],)
     def set_in_stock(self, request, queryset):
         queryset.update(in_stock=True)
     @admin.action(description='Set out of stock', permissions=['change'],)
     def set_out_of_stock(self, request, queryset):
         queryset.update(in_stock=False)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('manage-quantities/', self.admin_site.admin_view(self.manage_quantities_view),
+                 name='api_product_manage_quantities'),
+        ]
+        return custom_urls + urls
+
+    def manage_quantities_view(self, request):
+        """Bulk-edit stock_quantity / low_stock_threshold, grouped by category.
+
+        Categories and products are sorted alphabetically (note: not the SPA's
+        ProductGroup.order). By default only products that already track stock
+        (either field populated) are shown; ?all=1 shows every in-stock product."""
+        from django.http import HttpResponseRedirect
+        from django.shortcuts import render
+
+        show_all = request.GET.get('all') == '1'
+
+        if request.method == 'POST':
+            def parse(raw):
+                raw = (raw or '').strip().replace(',', '.')
+                if raw == '':
+                    return None
+                try:
+                    return Decimal(raw)
+                except (InvalidOperation, ValueError):
+                    return None
+            updated = 0
+            for product in Product.objects.all():
+                stock_key = f'stock_{product.id}'
+                threshold_key = f'threshold_{product.id}'
+                if stock_key not in request.POST and threshold_key not in request.POST:
+                    continue
+                new_stock = parse(request.POST.get(stock_key))
+                new_threshold = parse(request.POST.get(threshold_key))
+                if product.stock_quantity != new_stock or product.low_stock_threshold != new_threshold:
+                    product.stock_quantity = new_stock
+                    product.low_stock_threshold = new_threshold
+                    product.save()
+                    updated += 1
+            messages.success(request, f'Saved quantities for {updated} product(s).')
+            redirect_url = request.path + ('?all=1' if show_all else '')
+            return HttpResponseRedirect(redirect_url)
+
+        if show_all:
+            products = Product.objects.filter(in_stock=True)
+        else:
+            products = Product.objects.filter(
+                Q(stock_quantity__isnull=False) | Q(low_stock_threshold__isnull=False)
+            )
+        products = products.select_related('group')
+
+        # Group by category, both categories and products sorted alphabetically.
+        grouped = defaultdict(list)
+        for product in products:
+            grouped[product.group.name if product.group else None].append(product)
+        groups = []
+        for name in sorted([n for n in grouped if n is not None], key=str.lower):
+            groups.append({'name': name, 'products': sorted(grouped[name], key=lambda p: p.name.lower())})
+        if None in grouped:
+            groups.append({'name': 'Uncategorized', 'products': sorted(grouped[None], key=lambda p: p.name.lower())})
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Manage quantities',
+            'groups': groups,
+            'show_all': show_all,
+        }
+        return render(request, 'admin/api/product/manage_quantities.html', context)
 
 class PurchaseAdmin(MyModelAdmin):
     list_display = ('tab', 'product', 'quantity', 'total', 'price_type', 'created_at',)
@@ -220,15 +293,27 @@ class PurchaseAdmin(MyModelAdmin):
         with transaction.atomic():
             obj.tab.balance += obj.total
             obj.tab.save()
+            # Restore stock for tracked products (mirrors the decrement on purchase).
+            if obj.product_id is not None:
+                Product.objects.filter(
+                    pk=obj.product_id, stock_quantity__isnull=False
+                ).update(stock_quantity=F('stock_quantity') + obj.quantity)
             super().delete_model(request, obj)
 
     def delete_queryset(self, request, queryset):
         with transaction.atomic():
             tab_totals = defaultdict(Decimal)
+            product_qtys = defaultdict(Decimal)
             for obj in queryset:
                 tab_totals[obj.tab_id] += obj.total
+                if obj.product_id is not None:
+                    product_qtys[obj.product_id] += obj.quantity
             for tab_id, total in tab_totals.items():
                 Tab.objects.filter(pk=tab_id).update(balance=F('balance') + total)
+            for product_id, qty in product_qtys.items():
+                Product.objects.filter(
+                    pk=product_id, stock_quantity__isnull=False
+                ).update(stock_quantity=F('stock_quantity') + qty)
             super().delete_queryset(request, queryset)
 
 class SettingAdmin(MyModelAdmin):

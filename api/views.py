@@ -1,13 +1,14 @@
 from django.http import HttpResponse
 from django.db import IntegrityError, models
+from django.db.models import F
 from django.shortcuts import render
 from django.utils import timezone
 from rest_framework import permissions, viewsets, serializers
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from datetime import datetime, timedelta
 
-from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked
+from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked, get_cash_enabled
 from .serializers import PurchaseSerializer, TabSerializer, ProductSerializer, ProductGroupSerializer, SessionSerializer
 from .shelly import turn_on_shelly, schedule_turn_off_shelly
 
@@ -51,6 +52,15 @@ class PurchaseViewSet(viewsets.GenericViewSet):
                 raise
             tab.balance -= serializer.validated_data['total']
             tab.save()
+            # Decrement tracked stock by the purchased quantity. Only products
+            # that track stock (stock_quantity not null) are touched; the count
+            # may go negative and never blocks the sale. Reaches here only on a
+            # genuine new save (replays returned early above), so idempotent.
+            purchase = serializer.instance
+            if purchase.product_id is not None:
+                Product.objects.filter(
+                    pk=purchase.product_id, stock_quantity__isnull=False
+                ).update(stock_quantity=F('stock_quantity') - serializer.validated_data['quantity'])
             return Response(serializer.data)
         return Response(serializer.errors)
     def list(self, request):
@@ -288,3 +298,11 @@ class SessionViewSet(viewsets.GenericViewSet):
 def csrf(request):
     # Render the CSRF token in a template
     return render(request, 'csrf.html')
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def config(request):
+    """Public client config. Whitelisted keys only — never dump the whole
+    Setting table, which holds Shelly cloud credentials."""
+    return Response({'cash_enabled': get_cash_enabled()})

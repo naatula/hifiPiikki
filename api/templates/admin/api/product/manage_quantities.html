@@ -1,0 +1,64 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Manage quantities | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:api_product_changelist' %}">Products</a>
+  &rsaquo; Manage quantities
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>Manage quantities</h1>
+
+<p>
+  {% if show_all %}
+    Showing all in-stock products.
+    <a href="{% url 'admin:api_product_manage_quantities' %}">Show only tracked products</a>
+  {% else %}
+    Showing products that already track stock.
+    <a href="{% url 'admin:api_product_manage_quantities' %}?all=1">Show all in-stock products</a>
+  {% endif %}
+</p>
+
+{% if groups %}
+<form method="post">
+  {% csrf_token %}
+  {% for group in groups %}
+    <h2>{{ group.name }}</h2>
+    <table style="width:100%;max-width:640px;border-collapse:collapse;margin-bottom:1.5rem;">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:0.4rem 0.6rem;">Product</th>
+          <th style="text-align:right;padding:0.4rem 0.6rem;width:9rem;">In stock</th>
+          <th style="text-align:right;padding:0.4rem 0.6rem;width:9rem;">Threshold</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for product in group.products %}
+        <tr>
+          <td style="padding:0.4rem 0.6rem;">
+            <a href="{% url 'admin:api_product_change' product.id %}">{{ product.name }}</a>
+          </td>
+          <td style="padding:0.4rem 0.6rem;text-align:right;">
+            <input type="number" step="0.01" name="stock_{{ product.id }}"
+                   value="{{ product.stock_quantity|default_if_none:'' }}" style="width:7rem;">
+          </td>
+          <td style="padding:0.4rem 0.6rem;text-align:right;">
+            <input type="number" step="0.01" name="threshold_{{ product.id }}"
+                   value="{{ product.low_stock_threshold|default_if_none:'' }}" style="width:7rem;">
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endfor %}
+  <p><button type="submit" class="default">Save quantities</button></p>
+</form>
+{% else %}
+<p>No products to show.</p>
+{% endif %}
+{% endblock %}

@@ -85,6 +85,16 @@ def home_kpis():
         or Decimal("0")
     )
     credit, debt, net = _balances()
+    # Products at or below their low-stock threshold (both fields must be set).
+    low_stock = list(
+        Product.objects.filter(
+            stock_quantity__isnull=False,
+            low_stock_threshold__isnull=False,
+            stock_quantity__lte=F("low_stock_threshold"),
+        )
+        .order_by("name")
+        .values("name", "stock_quantity", "low_stock_threshold")
+    )
     return {
         "period_days": HOME_KPI_DAYS,
         "period_label": f"Last {HOME_KPI_DAYS} days",
@@ -97,6 +107,7 @@ def home_kpis():
         "credit": credit,
         "debt": debt,
         "net": net,
+        "low_stock": low_stock,
     }
 
 

@@ -16,4 +16,5 @@ urlpatterns = [
     path('', include(router.urls)),
     path('auth/', include('rest_framework.urls', namespace='rest_framework')),
     path('csrf/', views.csrf),
+    path('config/', views.config),
 ]

@@ -18,6 +18,17 @@ def get_pin_lockout_threshold():
         return None
 
 
+def get_cash_enabled():
+    """Return True if cash ("Käteinen") checkout is enabled via the Setting model.
+
+    Cash sales record a 0,00 purchase (the operator prices them off the in/out
+    figures) but still decrement stock."""
+    setting = Setting.objects.filter(key='cash_enabled').first()
+    if setting is None or setting.value is None:
+        return False
+    return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 def is_tab_locked(tab, threshold=None):
     """Return True if the tab is locked out due to too many failed PIN attempts.
 
@@ -61,13 +72,18 @@ class Product(ParanoidModel):
     note = models.CharField(max_length=255, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
     in_stock = models.BooleanField(default=True)
+    # Optional inventory tracking; null means "not tracked". stock_quantity may
+    # go negative (oversold) and never gates a purchase. in_stock stays manual.
+    stock_quantity = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    low_stock_threshold = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     def __str__(self):
         return self.name
 
 class Purchase(ParanoidModel):
     PRICE_IN = 'in'
     PRICE_OUT = 'out'
-    PRICE_TYPE_CHOICES = [(PRICE_IN, 'Sisään'), (PRICE_OUT, 'Ulos')]
+    PRICE_CASH = 'cash'
+    PRICE_TYPE_CHOICES = [(PRICE_IN, 'Sisään'), (PRICE_OUT, 'Ulos'), (PRICE_CASH, 'Käteinen')]
 
     tab = models.ForeignKey(Tab, on_delete=models.PROTECT)
     product = models.ForeignKey(Product, on_delete=models.PROTECT, null=True)

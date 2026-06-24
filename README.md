@@ -64,6 +64,17 @@ Lista käytettävissä olevista Settings-avaimista:
 - `shelly_cloud_key`: Shelly Cloud API-avain
 - `shelly_cloud_device`: Shelly-laitteen ID
 - `pin_lockout_threshold`: Kokonaisluku, joka määrittää, kuinka monen peräkkäisen väärän PIN-koodin syöttämisen jälkeen piikki lukitaan. Jos avain on asettamatta, lukitus on pois käytöstä.
+- `cash_enabled`: Kun arvo on tosi (`true`/`1`/`yes`/`on`), kassanäkymään tulee tuotteille kolmas määräkenttä "Käteinen". Ks. [Käteinen](#käteinen).
+
+## Varastonseuranta
+
+Tuotteille voi asettaa hallintanäkymästä valinnaiset kentät `stock_quantity` (varastosaldo) ja `low_stock_threshold` (hälytysraja). Kun kumpikin on asetettu ja saldo on raja-arvossa tai sen alle, tuote näkyy hallinnan etusivun "Low stock" -listalla. Jokainen osto vähentää `stock_quantity`-saldoa ostetulla määrällä (myös käteismyynnit) ja oston poistaminen hallintanäkymästä palauttaa määrän saldoon. Saldo voi mennä negatiiviseksi eikä se koskaan estä ostoa. Boolean-kenttä `in_stock` on edelleen erillinen, käsin asetettava lippu eikä varastonseuranta vaikuta siihen.
+
+Tuotteiden saldoja ja rajoja voi muokata joukkona hallinnan sivulla Products → "Manage quantities", jossa tuotteet on ryhmitelty kategorioittain aakkosjärjestyksessä.
+
+## Käteinen
+
+Kun Settings-avain `cash_enabled` on päällä, kassanäkymässä näkyy tuotteille kolmas määräkenttä "Käteinen" ilman hintaa (myyjä hinnoittelee käteismyynnin sisään-/uloshintojen perusteella). Käteismyynnit kirjataan järjestelmään aina hintaan 0,00 €, koska raha liikkuu sovelluksen ulkopuolella — ne eivät siis muuta piikin saldoa, mutta vähentävät varastosaldoa ja näkyvät myydyissä määrissä.
 
 ## Shelly
 

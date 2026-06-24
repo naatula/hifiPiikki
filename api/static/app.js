@@ -6,6 +6,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     var busy = false
     var csrftoken = null
 
+    // Client config from GET /api/config/ (cached for offline). Drives the
+    // optional "Käteinen" (cash) checkout row.
+    var appConfig = { cash_enabled: false }
+
     const tabsById = {}
     var enteredPin = ''
 
@@ -101,6 +105,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             const item = { quantity: outCount, total: (outCount * parseFloat(checkoutProduct.price_out)).toFixed(2) }
             if(hasDistinctPrices) item.price_type = 'out'
             items.push(item)
+        }
+        // Cash sales are free in the system (0,00) but still record the quantity
+        // sold (which decrements stock server-side).
+        const cashCount = readCount(document.querySelector('#quantity-cash'))
+        if(cashCount > 0) {
+            items.push({ quantity: cashCount, total: '0.00', price_type: 'cash' })
         }
         return items
     }
@@ -662,13 +672,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             options.innerHTML = `<div id="checkout-price"><h2>Summa</h2><input type="text" id="custom-price" placeholder="0,00" step="0.01"><span style="font-size: 1.5rem">€</span></div>`
             document.querySelector('input#custom-price').addEventListener('input', updateConfirmation)
         }
-        else if(product.price_in === product.price_out) {
-            // Single price: one quantity input with the price shown beside it.
-            options.innerHTML = quantityRowHtml('quantity-out', 'Määrä', f_price_out, 1)
-        } else {
-            // Separate in/out prices: a quantity input for each, both starting at 0.
-            options.innerHTML = quantityRowHtml('quantity-in', 'Sisään', f_price_in, 0) +
-                quantityRowHtml('quantity-out', 'Ulos', f_price_out, 0)
+        else {
+            // Optional cash row (price-less): shown for any real product when
+            // cash checkout is enabled. Cash is free in the system (0,00).
+            const cashRow = appConfig.cash_enabled ? quantityRowHtml('quantity-cash', 'Käteinen', '', 0) : ''
+            if(product.price_in === product.price_out) {
+                // Single price: one quantity input with the price shown beside it.
+                options.innerHTML = quantityRowHtml('quantity-out', 'Määrä', f_price_out, 1) + cashRow
+            } else {
+                // Separate in/out prices: a quantity input for each, both starting at 0.
+                options.innerHTML = quantityRowHtml('quantity-in', 'Sisään', f_price_in, 0) +
+                    quantityRowHtml('quantity-out', 'Ulos', f_price_out, 0) + cashRow
+            }
         }
         wireQuantityRows()
         updateConfirmation()
@@ -912,6 +927,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         PiikkiOffline.setCache('products', products)
         renderProducts(products)
         return true
+    }
+
+    // Load client config (cash_enabled, ...). Caches the last good read so the
+    // Käteinen row still renders during an outage; falls back to the cached
+    // value (or the safe default) when offline.
+    const fetchConfig = async () => {
+        const { offline, response } = await PiikkiOffline.apiFetch('../api/config/')
+        if (offline) {
+            const cached = PiikkiOffline.getCache('config')
+            if (cached) appConfig = cached
+            return
+        }
+        if(!checkResponse(response)) return
+        appConfig = await response.json()
+        PiikkiOffline.setCache('config', appConfig)
     }
 
     const getCsrfToken = async () => {
@@ -1452,6 +1482,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             const cachedProducts = PiikkiOffline.getCache('products')
             if (cachedTabs && cachedProducts) {
                 PiikkiOffline.goOffline()
+                const cachedConfig = PiikkiOffline.getCache('config')
+                if (cachedConfig) appConfig = cachedConfig
                 renderTabs(cachedTabs)
                 renderProducts(cachedProducts)
                 renderActiveSession(PiikkiOffline.getCache('session'))
@@ -1464,6 +1496,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     } else if(await fetchTabs()) {
         PiikkiOffline.setLoggedIn(true)
+        await fetchConfig()
         await updateActiveSession()
         toMain()
     }
