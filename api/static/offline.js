@@ -458,7 +458,7 @@ const PiikkiOffline = (() => {
         const countEl = panel.querySelector('.offline-queue-count')
         const lastUpdateEl = panel.querySelector('.offline-last-update')
 
-        if (countEl) countEl.textContent = q.length > 0 ? `${q.length} toimintoa odottaa synkronointia.` : 'Luodut kirjaukset lisätään jonoon, ja synkronoidaan palvelimelle yhteyden palauduttua.'
+        if (countEl) countEl.textContent = q.length > 0 ? `Luodut kirjaukset tallennetaan tälle laitteelle, ja synkronoidaan palvelimelle yhteyden palauduttua. Saldojen tarkastelu ei ole mahdollista offline-tilassa. Tapahtumia jonossa: ${q.length}` : 'Luodut kirjaukset tallennetaan tälle laitteelle, ja synkronoidaan palvelimelle yhteyden palauduttua. Saldojen tarkastelu ei ole mahdollista offline-tilassa.'
         if (lastUpdateEl) lastUpdateEl.textContent = `Viimeisin yhteys palvelimeen: ${humanizeTime(updatedAt)}`
 
         if (listEl) {
