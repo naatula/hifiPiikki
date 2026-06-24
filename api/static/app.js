@@ -7,8 +7,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     var csrftoken = null
 
     // Client config from GET /api/config/ (cached for offline). Drives the
-    // optional "Käteinen" (cash) checkout row.
-    var appConfig = { cash_enabled: false }
+    // optional "Käteinen" (cash) checkout row and the "Oma summa" button.
+    // custom_amount defaults on so an outage before the first config load keeps
+    // the long-standing feature visible.
+    var appConfig = { cash_enabled: false, custom_amount_enabled: true }
 
     const tabsById = {}
     var enteredPin = ''
@@ -744,6 +746,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         })
     }
 
+    // Reflect config-driven UI that lives outside the per-checkout render. The
+    // "Oma summa" button is hidden when custom_amount_enabled is falsey; the
+    // cash row is handled inline in toCheckout.
+    const applyAppConfig = () => {
+        const button = document.querySelector('.quick-payment')
+        if (button) button.style.display = appConfig.custom_amount_enabled ? '' : 'none'
+    }
+
 
     const toMain = () => {
         fetchProducts()
@@ -974,11 +984,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (offline) {
             const cached = PiikkiOffline.getCache('config')
             if (cached) appConfig = cached
+            applyAppConfig()
             return
         }
         if(!checkResponse(response)) return
         appConfig = await response.json()
         PiikkiOffline.setCache('config', appConfig)
+        applyAppConfig()
     }
 
     const getCsrfToken = async () => {
@@ -1752,6 +1764,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 PiikkiOffline.goOffline()
                 const cachedConfig = PiikkiOffline.getCache('config')
                 if (cachedConfig) appConfig = cachedConfig
+                applyAppConfig()
                 renderTabs(cachedTabs)
                 renderProducts(cachedProducts)
                 renderActiveSession(PiikkiOffline.getCache('session'))

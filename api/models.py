@@ -29,6 +29,17 @@ def get_cash_enabled():
     return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def get_custom_amount_enabled():
+    """Return True if the "Oma summa" (custom amount) checkout is enabled.
+
+    Defaults to True when unset so existing installs keep the long-standing
+    feature; only an explicit falsey Setting disables it."""
+    setting = Setting.objects.filter(key='custom_amount_enabled').first()
+    if setting is None or setting.value is None:
+        return True
+    return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 def is_tab_locked(tab, threshold=None):
     """Return True if the tab is locked out due to too many failed PIN attempts.
 

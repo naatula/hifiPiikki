@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from django.utils.dateparse import parse_datetime
 
-from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked, get_cash_enabled
+from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked, get_cash_enabled, get_custom_amount_enabled
 from .serializers import PurchaseSerializer, TabSerializer, ProductSerializer, ProductGroupSerializer, SessionSerializer
 from .shelly import turn_on_shelly, schedule_turn_off_shelly
 
@@ -344,4 +344,7 @@ def csrf(request):
 def config(request):
     """Public client config. Whitelisted keys only — never dump the whole
     Setting table, which holds Shelly cloud credentials."""
-    return Response({'cash_enabled': get_cash_enabled()})
+    return Response({
+        'cash_enabled': get_cash_enabled(),
+        'custom_amount_enabled': get_custom_amount_enabled(),
+    })
