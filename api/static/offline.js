@@ -200,12 +200,16 @@ const PiikkiOffline = (() => {
         }
     }
 
-    const makeSessionStartItem = (tabId, tabName) => ({
+    const makeSessionStartItem = (tabId, tabName, clientUuid) => ({
         id: crypto.randomUUID(),
         type: 'session_start',
+        // Reuse a client_uuid already minted for an online attempt (so a start
+        // buffered after the online POST timed out replays under the same id and
+        // dedupes against the session the server may have already created);
+        // mint a fresh one for a purely offline start.
         body: {
             tab: tabId,
-            client_uuid: crypto.randomUUID(),
+            client_uuid: clientUuid || crypto.randomUUID(),
             started_at: new Date().toISOString(),
         },
         tabName,

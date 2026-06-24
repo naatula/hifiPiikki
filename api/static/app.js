@@ -1270,17 +1270,23 @@ document.addEventListener("DOMContentLoaded", async () => {
             return
         }
 
+        // Mint the client_uuid up front and send it with the online attempt so
+        // that if the response is lost (e.g. the request times out client-side
+        // while the slow Shelly call delays the server), the buffered replay
+        // below carries the same id and dedupes against the session the server
+        // may have already created — instead of tripping "active session exists".
+        const clientUuid = crypto.randomUUID()
         const { offline, response } = await PiikkiOffline.apiFetch('../api/sessions/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': await getCsrfToken() },
-            body: JSON.stringify({ "tab": tabId })
+            body: JSON.stringify({ "tab": tabId, "client_uuid": clientUuid })
         })
         // A 403 here means the session expired (the request was rejected before
         // any DB write) — buffer the start exactly like an offline one and kick a
         // sync, which silently re-auths and replays it. No data lost, no popup.
         const lapsed = !offline && response && isAuthFailure(response)
         if (offline || lapsed) {
-            const item = PiikkiOffline.makeSessionStartItem(tabId, tabName)
+            const item = PiikkiOffline.makeSessionStartItem(tabId, tabName, clientUuid)
             PiikkiOffline.enqueue(item)
             PiikkiOffline.setCache('session', { id: item.id, tab: tabId, tab_name: tabName, started_at: new Date().toISOString(), ended_at: null, total_host: 0, total_all: 0 })
             if (lapsed) trySilentReauth()   // re-auth, then drain the queue (no CSRF race)
