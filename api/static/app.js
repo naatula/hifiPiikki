@@ -734,6 +734,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         await fetchTabsPromise
         document.querySelector('.main-panel').classList.remove('active')
         document.querySelector('.checkout-panel').classList.add('active')
+        PiikkiBack.sync()
     }
 
     const enableQuickPayment = () => {
@@ -775,6 +776,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         clearMultiTabState()
         const toggleBtnOnExit = document.querySelector('#multi-tab-toggle')
         if (toggleBtnOnExit) toggleBtnOnExit.classList.remove('active')
+        PiikkiBack.sync()
     }
 
     const handleBackButton = () => {
@@ -1238,6 +1240,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const openSessionWindow = async () => {
         document.querySelector('.session-panel').classList.add('active')
         document.querySelector('.session-panel').classList.add('opening')
+        PiikkiBack.sync()
         document.querySelector('#session-tab-list').scroll(0, 0)
         if(activeHost !== null) {
             if (!PiikkiOffline.isOffline()) await updateActiveSession()
@@ -1257,6 +1260,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const closeSessionWindow = () => {
         document.querySelector('.session-panel').classList.add('closing')
+        PiikkiBack.sync()
         setTimeout(() => {
             document.querySelector('.session-panel').classList.remove('active')
             document.querySelector('.session-panel').classList.remove('closing')
@@ -1402,6 +1406,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const openStatisticsWindow = async (allowReauth = true) => {
         document.querySelector('.statistics-panel').classList.add('active')
         document.querySelector('.statistics-panel').classList.add('opening')
+        PiikkiBack.sync()
         document.querySelector('.statistics-list-view').style = ''
         document.querySelector('.statistics-detail-view').style = 'display: none;'
 
@@ -1616,6 +1621,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         closeStatisticsPinPad()
         statisticsPinTab = null
         document.querySelector('.statistics-panel').classList.add('closing')
+        PiikkiBack.sync()
         setTimeout(() => {
             document.querySelector('.statistics-panel').classList.remove('active')
             document.querySelector('.statistics-panel').classList.remove('closing')
@@ -1685,9 +1691,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         btn.textContent = 'Synkronoi'
         PiikkiOffline.renderPanel()
         document.querySelector('.offline-panel').classList.add('active')
+        PiikkiBack.sync()
     }
     const closeOfflinePanel = () => {
         document.querySelector('.offline-panel').classList.remove('active')
+        PiikkiBack.sync()
     }
     document.querySelector('#offline-button').addEventListener('click', openOfflinePanel)
     document.querySelectorAll('.offline-panel .close, .offline-panel').forEach(x => x.addEventListener('click', (e) => {
@@ -1732,6 +1740,60 @@ document.addEventListener("DOMContentLoaded", async () => {
             updateActiveSession()
         }
     })
+
+    // --- Android / browser back button support ---
+    // The hardware "back" should peel off whatever overlay sits on top (the PIN
+    // pad, the statistics detail view, a panel, or the checkout view) instead of
+    // leaving the app, and only exit once the bare home view is reached. We keep
+    // the history primed with a single dummy entry whenever any overlay is open,
+    // so a back press fires `popstate` (intercepted here) rather than unloading
+    // the page; on the home view nothing is primed, so back exits as usual.
+    const PiikkiBack = (() => {
+        const isActive = (sel) => {
+            const el = document.querySelector(sel)
+            // A panel mid-close still carries `active` but also `closing`; treat
+            // it as already gone so the priming logic stays in sync.
+            return !!el && el.classList.contains('active') && !el.classList.contains('closing')
+        }
+        const statisticsDetailOpen = () =>
+            isActive('.statistics-panel') &&
+            document.querySelector('.statistics-detail-view').style.display !== 'none'
+
+        // Topmost layer first — each close() peels exactly one level.
+        const layers = [
+            { open: () => document.querySelector('#statistics-pin-overlay').classList.contains('active'),
+              close: () => closeStatisticsPinPad() },
+            { open: statisticsDetailOpen, close: () => backToStatisticsList() },
+            { open: () => isActive('.statistics-panel'), close: () => closeStatisticsWindow() },
+            { open: () => isActive('.session-panel'), close: () => closeSessionWindow() },
+            { open: () => isActive('.offline-panel'), close: () => closeOfflinePanel() },
+            { open: () => isActive('.checkout-panel'), close: () => handleBackButton() },
+        ]
+
+        const anyOpen = () => layers.some(l => l.open())
+        const isPrimed = () => !!(history.state && history.state.piikkiOverlay)
+        const prime = () => { if (!isPrimed()) history.pushState({ piikkiOverlay: true }, '') }
+
+        // Keep the dummy entry in lockstep with overlay visibility. Called after
+        // every overlay open/close: pushes a dummy when one appears, and consumes
+        // a now-stale dummy (so a later home-screen back exits on the first press)
+        // when the last overlay is dismissed via the on-screen UI instead of back.
+        const sync = () => {
+            if (anyOpen()) prime()
+            else if (isPrimed()) history.back()
+        }
+
+        window.addEventListener('popstate', () => {
+            const layer = layers.find(l => l.open())
+            if (layer) layer.close()
+            // Re-prime while anything is still open — a nested layer, or a close
+            // that no-op'd behind the checkout `busy` guard. Otherwise we're back
+            // on the home view and the press falls through to exit the app.
+            if (anyOpen()) prime()
+        })
+
+        return { sync }
+    })()
 
     PiikkiOffline.init({
         onOfflineChange: (isOff) => {
