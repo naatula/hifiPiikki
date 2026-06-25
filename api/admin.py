@@ -17,7 +17,7 @@ class MyModelAdmin(ParanoidAdmin):
     pass
 
 class TabAdmin(MyModelAdmin):
-    list_display = ('name', 'balance', 'active', 'pin_required', 'pin_attempts',)
+    list_display = ('name', 'balance', 'active', 'ignore_balance_limit',)
     list_filter = ('active', 'pin_required',)
     ordering = ('name',)
     actions = ['validate_tabs', 'recalculate_balances', 'activate_tabs', 'deactivate_tabs', 'reset_pin_attempts']
