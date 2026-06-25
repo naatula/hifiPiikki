@@ -1011,7 +1011,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             productsDiv.classList.add('products')
             div.appendChild(productsDiv)
 
-            group.products.filter((x) => x.in_stock).sort((a, b) => a.name.localeCompare(b.name)).forEach(product => {
+            const inStock = group.products.filter((x) => x.in_stock)
+            if (group.id !== null) inStock.sort((a, b) => a.name.localeCompare(b.name))
+            inStock.forEach(product => {
                 const productDiv = document.createElement('div')
                 productDiv.id = `product-${product.id}`
                 const price = product.price_out === product.price_in ? `${product.price_out.replace(".",",")} €` : `${product.price_in.replace(".",",")} € / ${product.price_out.replace(".",",")} €`

@@ -1,6 +1,7 @@
 from decimal import Decimal, InvalidOperation
 from django.db import IntegrityError, models, transaction
-from django.db.models import F
+from django.db.models import Case, F, Value, When
+from django.db.models.functions import ExtractHour
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -8,6 +9,7 @@ from rest_framework import permissions, viewsets, serializers
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from django.utils.dateparse import parse_datetime
 
@@ -21,6 +23,7 @@ from .shelly import turn_on_shelly, schedule_turn_off_shelly
 # must stay untouched). A timed-out online request that gets buffered replays
 # within seconds; a genuinely offline start/end may replay hours later.
 LIVE_EVENT_WINDOW = timedelta(minutes=5)
+LOCAL_TZ = ZoneInfo("Europe/Helsinki")
 
 
 def _is_live_event(event_time):
@@ -266,6 +269,52 @@ class TabViewSet(viewsets.ReadOnlyModelViewSet):
         return response
 
 
+def _compute_recommendations(session):
+    now = timezone.now()
+    recency_weight = Case(
+        When(occurred_at__gte=now - timedelta(days=7), then=Value(4)),
+        When(occurred_at__gte=now - timedelta(days=30), then=Value(2)),
+        When(occurred_at__gte=now - timedelta(days=90), then=Value(1)),
+        default=Value(Decimal('0.5')),
+        output_field=models.DecimalField(),
+    )
+    base_qs = Purchase.objects.filter(
+        product__isnull=False,
+        product__in_stock=True,
+        occurred_at__gte=now - timedelta(days=180),
+    )
+
+    if session is not None:
+        current_hour = timezone.localtime(now, LOCAL_TZ).hour
+        nearby_hours = [(current_hour + offset) % 24 for offset in range(-2, 3)]
+        scores = (
+            base_qs
+            .annotate(local_hour=ExtractHour('occurred_at', tzinfo=LOCAL_TZ))
+            .annotate(time_bonus=Case(
+                When(local_hour__in=nearby_hours, then=Value(Decimal('1.5'))),
+                default=Value(1),
+                output_field=models.DecimalField(),
+            ))
+            .values('product')
+            .annotate(score=models.Sum(F('quantity') * recency_weight * F('time_bonus')))
+            .order_by('-score')[:8]
+        )
+    else:
+        scores = (
+            base_qs
+            .values('product')
+            .annotate(score=models.Sum(F('quantity') * recency_weight))
+            .order_by('-score')[:6]
+        )
+
+    product_ids = [row['product'] for row in scores]
+    if not product_ids:
+        return []
+
+    products_map = {p.id: p for p in Product.objects.filter(id__in=product_ids, in_stock=True)}
+    return [ProductSerializer(products_map[pid]).data for pid in product_ids if pid in products_map]
+
+
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ProductGroup.objects.all().order_by('order')
     serializer_class = ProductGroupSerializer
@@ -274,21 +323,10 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     def list(self, request):
         queryset = ProductGroup.objects.all().order_by('order')
         serializer = ProductGroupSerializer(queryset, many=True)
-        recommendations = list(Purchase.objects.filter(product__isnull=False, occurred_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6])
-        session = Session.objects.filter(ended_at=None).first()
-        if session is not None:
-            recommendations = list(Purchase.objects.filter(tab=session.tab, occurred_at__gte=timezone.now()-timedelta(days=90)).values('product').annotate(total=models.Sum('quantity')).order_by('-total')[:6]) + recommendations
-        # Remove duplicates
-        recommendations = list({v['product']:v for v in recommendations}.values())
-        # Add the recommendations to the response
-        recs = []
-        for rec in recommendations:
-            id = rec['product']
-            if id:
-                product = Product.objects.get(id=id)
-                recs.append(ProductSerializer(product).data)
         data = serializer.data
-        if len(recs) > 0:
+        session = Session.objects.filter(ended_at=None).first()
+        recs = _compute_recommendations(session)
+        if recs:
             data = [{'id': None, 'name': 'Suositukset', 'products': recs}] + data
         return Response(data)
 
