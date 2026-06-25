@@ -331,6 +331,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const toggleMultiTabMode = () => {
+        if (multiTabPinPendingTab !== null) cancelMultiTabPin()
         multiTabMode = !multiTabMode
         document.querySelector('#multi-tab-toggle').classList.toggle('active', multiTabMode)
         clearMultiTabState()
