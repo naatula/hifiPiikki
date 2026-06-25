@@ -41,9 +41,8 @@ test.describe('Offline mode', () => {
     await h.login(page)
     await h.goOffline(page)
     await h.startPurchase(page)
-    await expect(
-      page.locator('.checkout-panel .tab-list .tabs > div', { hasText: h.PIN_TAB }).first()
-    ).toHaveClass(/pin-disabled/)
+    await page.locator('.checkout-panel .tab-list .tabs > div', { hasText: h.PIN_TAB }).first().click()
+    await expect(page.locator('.toast', { hasText: 'PIN-suojatut piikit' })).toBeVisible()
     await page.locator('.checkout-panel .back').click()
     await expect(page.locator('.main-panel')).toHaveClass(/active/)
     await expect(page.locator('#statistics-button')).toBeVisible()
