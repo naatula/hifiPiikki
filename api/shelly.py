@@ -41,7 +41,6 @@ class ShellyCloudClient:
         try:
             response = requests.post(url, headers=self.headers, json=data, params=params, timeout=10)
             response.raise_for_status()
-            return response.json()
 
         except requests.exceptions.Timeout:
             raise ShellyCloudError("Request timeout when communicating with Shelly Cloud")
@@ -51,6 +50,15 @@ class ShellyCloudClient:
             raise ShellyCloudError(f"HTTP error from Shelly Cloud: {e}")
         except requests.exceptions.RequestException as e:
             raise ShellyCloudError(f"Request error: {e}")
+
+        # The command succeeded once we get a 2xx; the body is unused. Tolerate
+        # an empty/non-JSON body — in requests >= 2.27 a json() failure raises a
+        # RequestException subclass, which would otherwise read as a failure and
+        # report shelly_ok=False even though the device already toggled.
+        try:
+            return response.json()
+        except ValueError:
+            return {}
 
     def turn_on(self) -> Optional[bool]:
         """Turn on the Shelly device immediately
