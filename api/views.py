@@ -1,6 +1,7 @@
-from django.http import HttpResponse
-from django.db import IntegrityError, models
+from decimal import Decimal, InvalidOperation
+from django.db import IntegrityError, models, transaction
 from django.db.models import F
+from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
 from rest_framework import permissions, viewsets, serializers
@@ -10,7 +11,7 @@ from datetime import datetime, timedelta
 
 from django.utils.dateparse import parse_datetime
 
-from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked, get_cash_enabled, get_custom_amount_enabled
+from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked, get_cash_enabled, get_custom_amount_enabled, get_negative_balance_limit
 from .serializers import PurchaseSerializer, TabSerializer, ProductSerializer, ProductGroupSerializer, SessionSerializer
 from .shelly import turn_on_shelly, schedule_turn_off_shelly
 
@@ -45,51 +46,101 @@ class PurchaseViewSet(viewsets.GenericViewSet):
     serializer_class = PurchaseSerializer
     permission_classes = [permissions.IsAuthenticated]
     def create(self, request):
-        client_uuid = request.data.get('client_uuid')
-        if client_uuid:
-            existing = Purchase.objects.filter(client_uuid=client_uuid).first()
+        items = request.data.get('items')
+        if not items or not isinstance(items, list):
+            return Response({'error': 'items is required'}, status=400)
+
+        tab_id = request.data.get('tab')
+        try:
+            tab = Tab.objects.get(pk=tab_id)
+        except (Tab.DoesNotExist, TypeError, ValueError):
+            return Response({'error': 'Invalid tab'}, status=400)
+
+        client_uuids = [it.get('client_uuid') for it in items if it.get('client_uuid')]
+        if client_uuids:
+            existing = list(Purchase.objects.filter(client_uuid__in=client_uuids))
             if existing:
-                return Response(PurchaseSerializer(existing).data)
-        serializer = PurchaseSerializer(data=request.data)
-        if serializer.is_valid():
-            tab = serializer.validated_data['tab']
-            if tab.pin_required:
-                threshold = get_pin_lockout_threshold()
-                if is_tab_locked(tab, threshold):
-                    return Response(
-                        {'error': 'locked', 'pin_attempts': tab.pin_attempts, 'pin_locked': True},
-                        status=403,
-                    )
-                pin = request.data.get('pin')
-                if pin != tab.pin:
-                    tab.pin_attempts += 1
-                    tab.save()
-                    return Response(
-                        {'error': 'wrong_pin', 'pin_attempts': tab.pin_attempts,
-                         'pin_locked': is_tab_locked(tab, threshold)},
-                        status=403,
-                    )
-                tab.pin_attempts = 0
+                return Response(PurchaseSerializer(existing, many=True).data)
+
+        product_id = request.data.get('product')
+        product = None
+        if product_id is not None:
             try:
-                serializer.save()
-            except IntegrityError:
-                existing = Purchase.objects.filter(client_uuid=client_uuid).first()
-                if existing:
-                    return Response(PurchaseSerializer(existing).data)
-                raise
-            tab.balance -= serializer.validated_data['total']
+                product = Product.objects.get(pk=product_id)
+            except (Product.DoesNotExist, TypeError, ValueError):
+                return Response({'error': 'Invalid product'}, status=400)
+
+        occurred_at = request.data.get('occurred_at')
+        if occurred_at:
+            occurred_at = parse_datetime(str(occurred_at))
+        if not occurred_at:
+            occurred_at = timezone.now()
+
+        parsed_items = []
+        for it in items:
+            try:
+                quantity = Decimal(str(it.get('quantity', 0)))
+                total = Decimal(str(it.get('total', 0)))
+            except (InvalidOperation, TypeError):
+                return Response({'error': 'Invalid quantity or total'}, status=400)
+            parsed_items.append({
+                'quantity': quantity,
+                'total': total,
+                'price_type': it.get('price_type') or '',
+                'client_uuid': it.get('client_uuid'),
+            })
+
+        if tab.pin_required:
+            threshold = get_pin_lockout_threshold()
+            if is_tab_locked(tab, threshold):
+                return Response(
+                    {'error': 'locked', 'pin_attempts': tab.pin_attempts, 'pin_locked': True},
+                    status=403,
+                )
+            pin = request.data.get('pin')
+            if pin != tab.pin:
+                tab.pin_attempts += 1
+                tab.save()
+                return Response(
+                    {'error': 'wrong_pin', 'pin_attempts': tab.pin_attempts,
+                     'pin_locked': is_tab_locked(tab, threshold)},
+                    status=403,
+                )
+            tab.pin_attempts = 0
+
+        combined_total = sum(it['total'] for it in parsed_items)
+
+        if not tab.ignore_balance_limit:
+            limit = get_negative_balance_limit()
+            if limit is not None and tab.balance - combined_total < -limit:
+                return Response(
+                    {'error': 'balance_limit', 'limit': str(limit)},
+                    status=400,
+                )
+
+        purchases = []
+        with transaction.atomic():
+            for it in parsed_items:
+                purchases.append(Purchase.objects.create(
+                    tab=tab,
+                    product=product,
+                    quantity=it['quantity'],
+                    total=it['total'],
+                    price_type=it['price_type'],
+                    client_uuid=it['client_uuid'],
+                    occurred_at=occurred_at,
+                ))
+            tab.balance -= combined_total
+            if tab.pin_required:
+                tab.pin_attempts = 0
             tab.save()
-            # Decrement tracked stock by the purchased quantity. Only products
-            # that track stock (stock_quantity not null) are touched; the count
-            # may go negative and never blocks the sale. Reaches here only on a
-            # genuine new save (replays returned early above), so idempotent.
-            purchase = serializer.instance
-            if purchase.product_id is not None:
+            if product is not None:
+                total_quantity = sum(it['quantity'] for it in parsed_items)
                 Product.objects.filter(
-                    pk=purchase.product_id, stock_quantity__isnull=False
-                ).update(stock_quantity=F('stock_quantity') - serializer.validated_data['quantity'])
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+                    pk=product.pk, stock_quantity__isnull=False
+                ).update(stock_quantity=F('stock_quantity') - total_quantity)
+
+        return Response(PurchaseSerializer(purchases, many=True).data)
     def list(self, request):
         return Response(PurchaseSerializer(
             Purchase.objects.filter(
@@ -344,7 +395,13 @@ def csrf(request):
 def config(request):
     """Public client config. Whitelisted keys only — never dump the whole
     Setting table, which holds Shelly cloud credentials."""
+    from .models import Setting
+    limit = get_negative_balance_limit()
+    org = Setting.objects.filter(key='organization_name').first()
+    org_name = org.value if org and org.value else ''
     return Response({
         'cash_enabled': get_cash_enabled(),
         'custom_amount_enabled': get_custom_amount_enabled(),
+        'negative_balance_limit': str(limit) if limit is not None else None,
+        'organization_name': org_name,
     })

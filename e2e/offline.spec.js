@@ -17,7 +17,7 @@ test.describe('Offline mode', () => {
     const q = await h.queue(page)
     expect(q.length).toBe(1)
     expect(q[0].status).toBe('pending')
-    await expect(page.locator('#offline-button')).toBeVisible()
+    await expect(page.locator('#offline-indicator')).toHaveClass(/active/)
     expect(h.countPurchases()).toBe(0)
   })
 
@@ -37,7 +37,7 @@ test.describe('Offline mode', () => {
     expect(h.countPurchases()).toBe(1)
   })
 
-  test('PIN tabs are non-selectable and statistics is unreachable offline', async ({ page }) => {
+  test('PIN tabs are non-selectable offline and statistics shows local balances', async ({ page }) => {
     await h.login(page)
     await h.goOffline(page)
     await h.startPurchase(page)
@@ -46,8 +46,8 @@ test.describe('Offline mode', () => {
     ).toHaveClass(/pin-disabled/)
     await page.locator('.checkout-panel .back').click()
     await expect(page.locator('.main-panel')).toHaveClass(/active/)
-    await expect(page.locator('#statistics-button')).not.toBeVisible()
-    await expect(page.locator('#offline-button')).toBeVisible()
+    await expect(page.locator('#statistics-button')).toBeVisible()
+    await expect(page.locator('#offline-indicator')).toHaveClass(/active/)
   })
 
   test('offline state and queue survive a reload', async ({ page }) => {
@@ -64,15 +64,15 @@ test.describe('Offline mode', () => {
     await expect(page.locator('.main-panel')).toHaveClass(/active/, { timeout: 10_000 })
     const q = await h.queue(page)
     expect(q.length).toBe(1)
-    await expect(page.locator('#offline-button')).toBeVisible()
+    await expect(page.locator('#offline-indicator')).toHaveClass(/active/)
     expect(h.countPurchases()).toBe(0)
   })
 
   test('a permanently-rejected item is marked failed and dismissable', async ({ page }) => {
     await h.login(page)
     await page.evaluate(() => {
-      PiikkiOffline.enqueue(PiikkiOffline.makePurchaseItem(
-        { tab: 999999, quantity: 1, total: '3.00', product: null },
+      PiikkiOffline.enqueue(PiikkiOffline.makePurchaseBundle(
+        { tab: 999999, product: null, items: [{ quantity: 1, total: '3.00', price_type: null, client_uuid: crypto.randomUUID() }] },
         'Fake', 'Fake Tab'
       ))
     })
@@ -91,9 +91,9 @@ test.describe('Offline mode', () => {
       { timeout: 10_000 }
     ).toBeTruthy()
 
-    await expect(page.locator('#offline-button')).toBeVisible()
-    await page.locator('#offline-button').click()
-    await expect(page.locator('.offline-panel')).toHaveClass(/active/)
+    await expect(page.locator('#offline-indicator')).toHaveClass(/active/)
+    await page.locator('#statistics-button').click()
+    await expect(page.locator('.statistics-panel')).toHaveClass(/active/)
     await expect(page.locator('.offline-queue-item.failed')).toBeVisible()
     await expect(page.locator('.offline-item-dismiss')).toBeVisible()
 

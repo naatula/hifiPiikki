@@ -40,6 +40,20 @@ def get_custom_amount_enabled():
     return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def get_negative_balance_limit():
+    """Return the negative balance limit as a positive Decimal, or None if
+    unset/empty (which means no limit)."""
+    setting = Setting.objects.filter(key='negative_balance_limit').first()
+    if setting is None or setting.value is None or str(setting.value).strip() == '':
+        return None
+    try:
+        from decimal import Decimal, InvalidOperation
+        val = Decimal(str(setting.value).strip())
+        return val if val > 0 else None
+    except (InvalidOperation, ValueError):
+        return None
+
+
 def is_tab_locked(tab, threshold=None):
     """Return True if the tab is locked out due to too many failed PIN attempts.
 
@@ -60,7 +74,8 @@ class Tab(ParanoidModel):
     pin = models.CharField(max_length=6, blank=True, null=True, validators=[RegexValidator(r'^\d{6}$', 'PIN must be exactly 6 digits')])
     pin_required = models.BooleanField(default=False)
     pin_attempts = models.IntegerField(default=0)
-    
+    ignore_balance_limit = models.BooleanField(default=False)
+
     def clean(self):
         super().clean()
         if self.pin_required and not self.pin:

@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // optional "Käteinen" (cash) checkout row and the "Oma summa" button.
     // custom_amount defaults on so an outage before the first config load keeps
     // the long-standing feature visible.
-    var appConfig = { cash_enabled: false, custom_amount_enabled: true }
+    var appConfig = { cash_enabled: false, custom_amount_enabled: true, organization_name: '', negative_balance_limit: null }
 
     const tabsById = {}
     var enteredPin = ''
@@ -123,6 +123,30 @@ document.addEventListener("DOMContentLoaded", async () => {
             return null
         }
         return tab
+    }
+
+    const wouldExceedBalanceLimit = (tab, items) => {
+        const limit = appConfig.negative_balance_limit
+        if (limit == null) return false
+        const tabData = tabsById[tab.id]
+        if (!tabData || tabData.ignore_balance_limit) return false
+        const total = items.reduce((s, it) => s + parseFloat(it.total), 0)
+        return (parseFloat(tabData.balance) - total) < -parseFloat(limit)
+    }
+
+    const showBalanceLimitToast = () => {
+        PiikkiToast.show({
+            id: 'purchase-error',
+            message: 'Saldon raja ylitetty — ostoa ei voitu tehdä',
+            variant: 'error', icon: 'error', duration: 5000, dismissible: true,
+        })
+    }
+
+    const deductLocalBalance = (tabId, items) => {
+        const tabData = tabsById[tabId]
+        if (!tabData) return
+        const total = items.reduce((s, it) => s + parseFloat(it.total), 0)
+        tabData.balance = (parseFloat(tabData.balance) - total).toFixed(2)
     }
 
     // Clamp a quantity input to a decimal in 0–99.99 (0.01 precision).
@@ -309,11 +333,25 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (busy) return
         const items = getLineItems()
         if (items.length === 0 || selectedTabs.size === 0) return
+
+        const blockedTabs = [...selectedTabs.values()].filter(({ tab }) => wouldExceedBalanceLimit(tab, items))
+        if (blockedTabs.length) {
+            const names = blockedTabs.map(({ tab }) => tab.name).join(', ')
+            PiikkiToast.show({
+                id: 'purchase-error',
+                message: `Saldon raja ylitetty: ${names}`,
+                variant: 'error', icon: 'error', duration: 0, dismissible: true,
+            })
+            toMain()
+            return
+        }
+
         busy = true
 
         if (PiikkiOffline.isOffline()) {
             for (const { tab } of selectedTabs.values()) {
                 enqueuePurchaseItems(items, tab)
+                deductLocalBalance(tab.id, items)
             }
             document.querySelector('#confirmation').classList.add('ok')
             audio.play()
@@ -325,6 +363,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!token) {
             for (const { tab } of selectedTabs.values()) {
                 enqueuePurchaseItems(items, tab)
+                deductLocalBalance(tab.id, items)
             }
             document.querySelector('#confirmation').classList.add('ok')
             audio.play()
@@ -333,23 +372,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         document.querySelector('#confirmation').classList.add('ok')
         audio.play()
-        // One purchase per (tab, line); each carries its own client_uuid. A tab's
-        // PIN rides along in memory and is never buffered, so an expired session
-        // is recovered by an inline silent re-auth + retry inside runPurchaseAttempts.
-        const attempts = []
+        const bundles = []
         for (const { tab, pin } of selectedTabs.values()) {
-            for (const item of items) {
-                attempts.push({ tab, pin, item: { ...item, client_uuid: crypto.randomUUID() } })
-            }
+            const taggedItems = items.map(it => ({ ...it, client_uuid: crypto.randomUUID() }))
+            bundles.push({ tab, pin, items: taggedItems })
         }
         setTimeout(async () => {
             let result
             try {
-                result = await runPurchaseAttempts(attempts, true)
+                result = await runPurchaseAttempts(bundles, true)
             } catch {
-                // Network dropped mid-batch — buffer every line (idempotent via
-                // client_uuid, so any that already landed won't double-charge).
-                for (const a of attempts) enqueuePurchaseItems([a.item], a.tab)
+                for (const b of bundles) {
+                    enqueuePurchaseItems(b.items, b.tab)
+                    deductLocalBalance(b.tab.id, b.items)
+                }
                 busy = false
                 toMain()
                 return
@@ -358,8 +394,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (!result.ok) {
                 document.querySelector('#confirmation').classList.remove('ok')
                 if (result.kind === 'auth') {
-                    // No stored credentials to recover with — re-login is the only path.
                     toLogin('Istunto vanhentunut — kirjaudu uudelleen')
+                } else if (result.kind === 'balance_limit') {
+                    const names = [...result.balanceLimitedTabs].join(', ')
+                    PiikkiToast.show({
+                        id: 'purchase-error',
+                        message: `Saldon raja ylitetty: ${names}`,
+                        variant: 'error', icon: 'error', duration: 0, dismissible: true,
+                    })
                 } else {
                     PiikkiToast.show({
                         id: 'purchase-error',
@@ -368,6 +410,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                         actions: [{ label: 'Lataa uudelleen', primary: true, onClick: () => { location.reload() } }],
                     })
                 }
+            } else {
+                for (const b of bundles) deductLocalBalance(b.tab.id, b.items)
             }
             toMain()
         }, 500)
@@ -391,50 +435,53 @@ document.addEventListener("DOMContentLoaded", async () => {
         confirmPurchase()
     }
 
-    // POST a single purchase line item. PIN is included only when provided.
-    const postPurchase = (item, pin, token, tab) => {
+    const postPurchases = (items, pin, token, tab) => {
         const body = {
-            "tab": tab.id,
-            "quantity": item.quantity,
-            "total": item.total,
-            "product": checkoutProduct?.id,
+            tab: tab.id,
+            product: checkoutProduct?.id,
+            items: items.map(it => ({
+                quantity: it.quantity,
+                total: it.total,
+                price_type: it.price_type || null,
+                client_uuid: it.client_uuid,
+            })),
         }
-        if(item.price_type) body.price_type = item.price_type
-        // A stable client_uuid lets the server dedupe a replay/retry of this exact
-        // line, so re-sending after a recovered session never double-charges.
-        if(item.client_uuid) body.client_uuid = item.client_uuid
-        if(pin !== null) body.pin = pin
+        if (pin !== null) body.pin = pin
         return fetch('../api/purchases/', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': token
-            },
-            body: JSON.stringify(body)
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+            body: JSON.stringify(body),
         })
     }
 
     const enqueuePurchaseItems = (items, tab) => {
         const productName = checkoutProduct ? checkoutProduct.name : 'Oma summa'
-        items.forEach(item => {
-            PiikkiOffline.enqueue(PiikkiOffline.makePurchaseItem(
-                { tab: tab.id, quantity: item.quantity, total: item.total, product: checkoutProduct?.id, price_type: item.price_type || null },
-                productName, tab.name
-            ))
-        })
+        PiikkiOffline.enqueue(PiikkiOffline.makePurchaseBundle(
+            {
+                tab: tab.id,
+                product: checkoutProduct?.id,
+                items: items.map(it => ({
+                    quantity: it.quantity, total: it.total,
+                    price_type: it.price_type || null,
+                    client_uuid: it.client_uuid || crypto.randomUUID(),
+                })),
+            },
+            productName, tab.name
+        ))
     }
 
     const confirmPurchase = async () => {
         if(busy) return
-        // Tag each line with a client_uuid up front so the same id is used whether
-        // it goes online now or gets buffered on failure — replays stay idempotent.
         const items = getLineItems().map((it) => ({ ...it, client_uuid: crypto.randomUUID() }))
         const tab = getTab()
         if(items.length === 0 || tab === null) return
+
+        if (wouldExceedBalanceLimit(tab, items)) { showBalanceLimitToast(); return }
         busy = true
 
         if (PiikkiOffline.isOffline()) {
             enqueuePurchaseItems(items, tab)
+            deductLocalBalance(tab.id, items)
             document.querySelector('#confirmation').classList.add('ok')
             audio.play()
             setTimeout(() => { busy = false; toMain() }, 500)
@@ -444,93 +491,89 @@ document.addEventListener("DOMContentLoaded", async () => {
         const token = await getCsrfToken()
         if (!token) {
             enqueuePurchaseItems(items, tab)
+            deductLocalBalance(tab.id, items)
             document.querySelector('#confirmation').classList.add('ok')
             audio.play()
             setTimeout(() => { busy = false; toMain() }, 500)
             return
         }
-        const requests = items.map((item) => postPurchase(item, null, token, tab))
         document.querySelector('#confirmation').classList.add('ok')
         audio.play()
-        setTimeout( async () => {
+        setTimeout(async () => {
             try {
-                const responses = await Promise.all(requests)
-                // Buffer only the lines the expired session rejected (a 403 is
-                // rejected before any DB write, so this can't double-charge); the
-                // queue then silently re-auths and replays them.
-                const lapsed = []
-                let otherError = false
-                for (let i = 0; i < responses.length; i++) {
-                    if (responses[i].ok) continue
-                    const cls = await classifyMutation(responses[i])
-                    if (cls.kind === 'auth') lapsed.push(items[i])
-                    else otherError = true
-                }
+                const response = await postPurchases(items, null, token, tab)
                 busy = false
-                if (lapsed.length) {
-                    enqueuePurchaseItems(lapsed, tab)
-                    trySilentReauth()   // re-auth, then drain the queue (no CSRF race)
+                if (response.ok) {
+                    deductLocalBalance(tab.id, items)
+                    toMain()
+                    return
                 }
-                if (otherError) {
-                    document.querySelector('#confirmation').classList.remove('ok')
+                const cls = await classifyMutation(response)
+                document.querySelector('#confirmation').classList.remove('ok')
+                if (cls.kind === 'balance_limit') {
+                    showBalanceLimitToast()
+                } else if (cls.kind === 'auth') {
+                    enqueuePurchaseItems(items, tab)
+                    deductLocalBalance(tab.id, items)
+                    trySilentReauth()
+                    toMain()
+                } else {
                     PiikkiToast.show({
                         id: 'purchase-error',
                         message: 'Osto ei mennyt läpi — tarkista tilanne historiasta',
                         variant: 'error', icon: 'error', duration: 0, dismissible: true,
                         actions: [{ label: 'Lataa uudelleen', primary: true, onClick: () => { location.reload() } }],
                     })
+                    toMain()
                 }
-                toMain()
             } catch {
                 enqueuePurchaseItems(items, tab)
+                deductLocalBalance(tab.id, items)
                 busy = false
                 toMain()
             }
         }, 500)
     }
 
-    const submitPinPurchase = async (pin, startItems = null, allowReauth = true) => {
+    const submitPinPurchase = async (pin, items = null, allowReauth = true) => {
         if(busy) return
-        // Tag each line with a client_uuid so an inline retry after re-auth dedupes.
-        const items = startItems || getLineItems().map((it) => ({ ...it, client_uuid: crypto.randomUUID() }))
+        if (!items) items = getLineItems().map((it) => ({ ...it, client_uuid: crypto.randomUUID() }))
         const tab = getTab()
         if(items.length === 0 || tab === null) return
-        const token = await getCsrfToken()
-        // Send the items one at a time so a wrong PIN aborts before any purchase
-        // is made (and the attempt counter is only bumped once).
-        var response = null
-        var idx = 0
-        for(idx = 0; idx < items.length; idx++) {
-            response = await postPurchase(items[idx], pin, token, tab)
-            if(response.status !== 200) break
+
+        if (wouldExceedBalanceLimit(tab, items)) {
+            hidePinpad()
+            showBalanceLimitToast()
+            return
         }
-        if(response && response.status === 200) {
+
+        const token = await getCsrfToken()
+        const response = await postPurchases(items, pin, token, tab)
+        if (response.ok) {
             busy = true
             hidePinpad()
+            deductLocalBalance(tab.id, items)
             document.querySelector('#confirmation').classList.add('ok')
             audio.play()
-            setTimeout(() => {
-                toMain()
-            }, 500)
+            setTimeout(() => { toMain() }, 500)
             return
         }
         const cls = await classifyMutation(response)
-        if(cls.kind === 'auth') {
-            // Session expired mid PIN purchase. The PIN is never buffered, so
-            // recover inline: silent re-auth, then resume from the failed line
-            // (items[idx] got a 403 so it never persisted; earlier lines did).
-            if(allowReauth && await trySilentReauth()) {
+        if (cls.kind === 'balance_limit') {
+            hidePinpad()
+            showBalanceLimitToast()
+            return
+        }
+        if (cls.kind === 'auth') {
+            if (allowReauth && await trySilentReauth()) {
                 csrftoken = null
-                return submitPinPurchase(pin, items.slice(idx), false)
+                return submitPinPurchase(pin, items, false)
             }
             toLogin('Istunto vanhentunut — kirjaudu uudelleen')
             return
         }
-        // 403: wrong pin or locked
         enteredPin = ''
         applyPinError('#pinpad', tab, cls.body || {})
-        // The attempts / locked message changes the card height; re-anchor it
-        // above the confirm button so it stays put.
         positionPinpad()
     }
 
@@ -753,6 +796,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const applyAppConfig = () => {
         const button = document.querySelector('.quick-payment')
         if (button) button.style.display = appConfig.custom_amount_enabled ? '' : 'none'
+        const name = appConfig.organization_name || 'hifiPiikki'
+        document.querySelector('.login-title').textContent = name
     }
 
 
@@ -1124,36 +1169,38 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Classify a non-2xx mutation (purchase / session) response. 'auth' = an
     // expired session or CSRF/cookie failure that re-login fixes; 'pin' = a
-    // wrong/locked PIN (a legitimate rejection, never recovered); 'error' =
-    // anything else. Reads a clone so the caller can still consume the body.
+    // wrong/locked PIN (a legitimate rejection, never recovered); 'balance_limit'
+    // = tab would exceed the negative balance cap; 'error' = anything else.
+    // Reads a clone so the caller can still consume the body.
     const classifyMutation = async (response) => {
         if (!response) return { kind: 'error' }
+        let body = {}
+        try { body = await response.clone().json() } catch {}
+        if (body.error === 'balance_limit') return { kind: 'balance_limit', body }
         if (response.status === 401 || response.status === 403) {
-            let body = {}
-            try { body = await response.clone().json() } catch {}
             if (body.error === 'wrong_pin' || body.error === 'locked') return { kind: 'pin', body }
             return { kind: 'auth', body }
         }
         return { kind: 'error' }
     }
 
-    // Fire a batch of { tab, pin, item } purchase attempts in parallel. PINs are
-    // kept in memory only (never buffered), so an expired session is recovered
-    // by a single inline silent re-auth + retry of the not-yet-succeeded lines,
-    // not by queueing. client_uuid on each line makes the retry idempotent.
-    // Returns { ok: true } or { ok: false, kind: 'auth' | 'error' }.
-    const runPurchaseAttempts = async (attempts, allowReauth) => {
+    // Fire one bundled purchase request per tab in parallel. Each bundle
+    // is { tab, pin, items }. Returns { ok, kind, balanceLimitedTabs? }.
+    const runPurchaseAttempts = async (bundles, allowReauth) => {
         const token = await getCsrfToken()
-        const responses = await Promise.all(attempts.map(a => postPurchase(a.item, a.pin, token, a.tab)))
+        const responses = await Promise.all(bundles.map(b => postPurchases(b.items, b.pin, token, b.tab)))
         const failed = []
         let authLapse = false
         let otherError = false
+        const balanceLimitedTabs = new Set()
         for (let i = 0; i < responses.length; i++) {
             if (responses[i].ok) continue
             const cls = await classifyMutation(responses[i])
-            if (cls.kind === 'auth') { authLapse = true; failed.push(attempts[i]) }
+            if (cls.kind === 'auth') { authLapse = true; failed.push(bundles[i]) }
+            else if (cls.kind === 'balance_limit') balanceLimitedTabs.add(bundles[i].tab.name)
             else otherError = true
         }
+        if (balanceLimitedTabs.size) return { ok: false, kind: 'balance_limit', balanceLimitedTabs }
         if (otherError) return { ok: false, kind: 'error' }
         if (authLapse) {
             if (allowReauth && await trySilentReauth()) {
@@ -1419,18 +1466,27 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelector('.statistics-list-view').style = ''
         document.querySelector('.statistics-detail-view').style = 'display: none;'
 
-        // Fetch all tabs
-        const { offline, response } = await PiikkiOffline.apiFetch('../api/tabs/all/')
-        if (offline || !response.ok) {
-            if (!offline && await recoverFromFailure(response, allowReauth ? () => openStatisticsWindow(false) : null)) return true
-            if (offline) PiikkiToast.show({ id: 'api-error', message: 'Tilastot eivät ole käytettävissä offline-tilassa', variant: 'error', icon: 'error', duration: 5000 })
-            closeStatisticsWindow()
-            return false
+        let tabs
+        if (PiikkiOffline.isOffline()) {
+            tabs = Object.values(tabsById).sort((a, b) => a.name.localeCompare(b.name))
+        } else {
+            const { offline, response } = await PiikkiOffline.apiFetch('../api/tabs/all/')
+            if (offline) {
+                tabs = Object.values(tabsById).sort((a, b) => a.name.localeCompare(b.name))
+            } else if (!response.ok) {
+                if (await recoverFromFailure(response, allowReauth ? () => openStatisticsWindow(false) : null)) return true
+                closeStatisticsWindow()
+                return false
+            } else {
+                tabs = await response.json()
+            }
         }
-        const tabs = await response.json()
 
         const container = document.querySelector('.statistics-tabs')
+        const titleHtml = container.querySelector('h2')
         container.innerHTML = ''
+        if (titleHtml) container.appendChild(titleHtml)
+        else { const h = document.createElement('h2'); h.textContent = 'Kaikki piikit'; container.appendChild(h) }
 
         tabs.forEach((tab) => {
             const element = document.createElement('div')
@@ -1446,7 +1502,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             balSpan.textContent = currency(tab.balance)
             element.append(nameSpan, balSpan)
             element.addEventListener('click', () => {
-                // Add loading highlight
+                if (PiikkiOffline.isOffline()) {
+                    PiikkiToast.show({ id: 'offline-detail', message: 'Piikkitiedot eivät ole käytettävissä offline-tilassa', variant: 'error', icon: 'error', duration: 3000 })
+                    return
+                }
                 document.querySelectorAll('.statistics-tabs > div').forEach(el => el.classList.remove('selected'))
                 element.classList.add('selected')
                 openTabDetail(tab.id)
@@ -1645,7 +1704,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     document.querySelector('#statistics-button').addEventListener('click', () => {
-        if (PiikkiOffline.isOffline()) return
         openStatisticsWindow()
     })
     document.querySelectorAll('.statistics-panel .close, .statistics-panel').forEach((x) => x.addEventListener('click', (e) => {
@@ -1693,24 +1751,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.querySelector('.product-column').addEventListener('scroll', updateMarker)
     window.addEventListener('resize', updateMarker)
 
-    // Offline panel
-    const openOfflinePanel = () => {
-        const btn = document.querySelector('#offline-sync')
-        btn.classList.remove('disabled')
-        btn.textContent = 'Synkronoi'
-        PiikkiOffline.renderPanel()
-        document.querySelector('.offline-panel').classList.add('active')
-        PiikkiBack.sync()
-    }
-    const closeOfflinePanel = () => {
-        document.querySelector('.offline-panel').classList.remove('active')
-        PiikkiBack.sync()
-    }
-    document.querySelector('#offline-button').addEventListener('click', openOfflinePanel)
-    document.querySelectorAll('.offline-panel .close, .offline-panel').forEach(x => x.addEventListener('click', (e) => {
-        if(e.target !== e.currentTarget) return
-        closeOfflinePanel()
-    }))
     document.querySelector('#offline-sync').addEventListener('click', async () => {
         const btn = document.querySelector('#offline-sync')
         btn.classList.add('disabled')
@@ -1743,7 +1783,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             })
         }
         if (PiikkiOffline.getQueueSize() === 0 && !PiikkiOffline.isOffline()) {
-            closeOfflinePanel()
             fetchProducts()
             fetchTabs()
             updateActiveSession()
@@ -1775,7 +1814,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             { open: statisticsDetailOpen, close: () => backToStatisticsList() },
             { open: () => isActive('.statistics-panel'), close: () => closeStatisticsWindow() },
             { open: () => isActive('.session-panel'), close: () => closeSessionWindow() },
-            { open: () => isActive('.offline-panel'), close: () => closeOfflinePanel() },
             { open: () => isActive('.checkout-panel'), close: () => handleBackButton() },
         ]
 

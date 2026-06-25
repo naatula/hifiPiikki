@@ -22,7 +22,7 @@ class TabAdmin(MyModelAdmin):
     ordering = ('name',)
     actions = ['validate_tabs', 'recalculate_balances', 'activate_tabs', 'deactivate_tabs', 'reset_pin_attempts']
     change_list_template = 'admin/api/tab/change_list.html'
-    fields = ('name', 'balance', 'active', 'pin', 'pin_required', 'pin_attempts',)
+    fields = ('name', 'balance', 'active', 'pin', 'pin_required', 'pin_attempts', 'ignore_balance_limit',)
 
     def get_readonly_fields(self, request, obj=None):
         return super().get_readonly_fields(request, obj) + ('balance', 'pin_attempts',)
@@ -321,6 +321,7 @@ class PurchaseAdmin(MyModelAdmin):
 class SettingsForm(forms.Form):
     KNOWN_KEYS = [
         'cash_enabled', 'custom_amount_enabled', 'pin_lockout_threshold',
+        'negative_balance_limit', 'organization_name',
         'shelly_cloud_server', 'shelly_cloud_key', 'shelly_cloud_device',
     ]
     TRUTHY = ('1', 'true', 'yes', 'on')
@@ -340,6 +341,20 @@ class SettingsForm(forms.Form):
         min_value=1,
         label='PIN-lukitusraja',
         help_text='Suurin sallittu epäonnistuneiden PIN-yritysten määrä ennen tilin lukitusta. Jätä tyhjäksi poistaaksesi lukituksen käytöstä.',
+    )
+    negative_balance_limit = forms.DecimalField(
+        required=False,
+        min_value=Decimal('0.01'),
+        max_digits=10,
+        decimal_places=2,
+        label='Saldon alaraja (€)',
+        help_text='Kuinka paljon saldo saa mennä miinukselle (esim. 50 = saldo ei voi laskea alle −50,00 €). Jätä tyhjäksi poistaaksesi rajan. Yksittäisen piikin voi vapauttaa rajasta piikin asetuksissa.',
+    )
+    organization_name = forms.CharField(
+        required=False,
+        max_length=255,
+        label='Organisaation nimi',
+        help_text='Näytetään sovelluksen kirjautumisnäkymässä ja alatunnisteessa. Jätä tyhjäksi käyttääksesi oletusnimeä.',
     )
     shelly_cloud_server = forms.URLField(
         required=False,
@@ -383,6 +398,8 @@ class SettingAdmin(MyModelAdmin):
                 # Defaults to on when unset, mirroring get_custom_amount_enabled().
                 'custom_amount_enabled': str(settings_dict.get('custom_amount_enabled', 'true')).strip().lower() in SettingsForm.TRUTHY,
                 'pin_lockout_threshold': self._parse_optional_int(settings_dict.get('pin_lockout_threshold', '')),
+                'negative_balance_limit': self._parse_optional_decimal(settings_dict.get('negative_balance_limit', '')),
+                'organization_name': settings_dict.get('organization_name', ''),
                 'shelly_cloud_server': settings_dict.get('shelly_cloud_server', ''),
                 'shelly_cloud_key': settings_dict.get('shelly_cloud_key', ''),
                 'shelly_cloud_device': settings_dict.get('shelly_cloud_device', ''),
@@ -402,6 +419,8 @@ class SettingAdmin(MyModelAdmin):
             'cash_enabled': 'true' if cleaned_data['cash_enabled'] else 'false',
             'custom_amount_enabled': 'true' if cleaned_data['custom_amount_enabled'] else 'false',
             'pin_lockout_threshold': str(cleaned_data['pin_lockout_threshold']) if cleaned_data['pin_lockout_threshold'] is not None else '',
+            'negative_balance_limit': str(cleaned_data['negative_balance_limit']) if cleaned_data['negative_balance_limit'] is not None else '',
+            'organization_name': cleaned_data.get('organization_name') or '',
             'shelly_cloud_server': cleaned_data.get('shelly_cloud_server') or '',
             'shelly_cloud_key': cleaned_data.get('shelly_cloud_key') or '',
             'shelly_cloud_device': cleaned_data.get('shelly_cloud_device') or '',
@@ -422,6 +441,15 @@ class SettingAdmin(MyModelAdmin):
         try:
             return int(str(raw).strip())
         except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _parse_optional_decimal(raw):
+        if raw is None or str(raw).strip() == '':
+            return None
+        try:
+            return Decimal(str(raw).strip())
+        except (InvalidOperation, ValueError):
             return None
 
 class SessionAdmin(MyModelAdmin):

@@ -7,7 +7,7 @@ class TabSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Tab
-        fields = ['id', 'name', 'balance', 'active', 'updated_at', 'pin_required', 'pin_attempts', 'pin_locked', 'has_pin']
+        fields = ['id', 'name', 'balance', 'active', 'updated_at', 'pin_required', 'pin_attempts', 'pin_locked', 'has_pin', 'ignore_balance_limit']
         read_only_fields = ['pin_required', 'pin_attempts']
 
     def get_pin_locked(self, obj):

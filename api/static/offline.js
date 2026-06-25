@@ -183,15 +183,16 @@ const PiikkiOffline = (() => {
 
     const getQueueSize = () => loadQueue().length
 
-    const makePurchaseItem = (body, productName, tabName) => {
-        // Reuse a client_uuid already minted for an online attempt (so a line
-        // buffered after a mid-purchase failure replays under the same id and
-        // can't double-charge); mint a fresh one for a purely offline purchase.
-        const occurredAt = body.occurred_at || new Date().toISOString()
+    const makePurchaseBundle = (body, productName, tabName) => {
+        const occurredAt = new Date().toISOString()
+        const items = (body.items || []).map(it => ({
+            ...it,
+            client_uuid: it.client_uuid || crypto.randomUUID(),
+        }))
         return {
             id: crypto.randomUUID(),
             type: 'purchase',
-            body: { ...body, client_uuid: body.client_uuid || crypto.randomUUID(), occurred_at: occurredAt },
+            body: { tab: body.tab, product: body.product, occurred_at: occurredAt, items },
             productName,
             tabName,
             occurredAt,
@@ -362,9 +363,12 @@ const PiikkiOffline = (() => {
             })
             if (r.ok) return { ok: true }
             if (r.status >= 500) return { ok: false, transient: true }
+            let body = {}
+            try { body = await r.clone().json() } catch {}
+            if (body.error === 'balance_limit') {
+                return { ok: false, error: 'Saldon raja ylitetty' }
+            }
             if (r.status === 401 || r.status === 403) {
-                let body = {}
-                try { body = await r.json() } catch {}
                 if (body.error === 'wrong_pin' || body.error === 'locked') {
                     return { ok: false, error: 'PIN-virhe' }
                 }
@@ -461,8 +465,9 @@ const PiikkiOffline = (() => {
 
     const describeItem = (item) => {
         if (item.type === 'purchase') {
-            const qty = item.body.quantity || 1
-            const total = item.body.total || 0
+            const items = item.body.items || []
+            const qty = items.reduce((s, it) => s + parseFloat(it.quantity), 0)
+            const total = items.reduce((s, it) => s + parseFloat(it.total), 0)
             const product = item.productName || 'tuote'
             const tab = item.tabName || '?'
             return `${qty}× ${product} → ${tab} (${currency(total)})`
@@ -478,18 +483,22 @@ const PiikkiOffline = (() => {
     }
 
     const renderPanel = () => {
-        const panel = document.querySelector('.offline-panel')
-        if (!panel) return
+        const section = document.querySelector('#offline-queue-section')
+        if (!section) return
+
+        const showSection = !connected || getQueueSize() > 0
+        section.style.display = showSection ? '' : 'none'
+        if (!showSection) return
 
         const q = loadQueue()
         const updatedAt = getUpdatedAt()
 
-        const listEl = panel.querySelector('.offline-queue-list')
-        const countEl = panel.querySelector('.offline-queue-count')
-        const lastUpdateEl = panel.querySelector('.offline-last-update')
+        const lastUpdateEl = section.querySelector('.offline-last-update')
+        const countEl = section.querySelector('.offline-queue-count')
+        const listEl = section.querySelector('.offline-queue-list')
 
-        if (countEl) countEl.textContent = q.length > 0 ? `Luodut kirjaukset tallennetaan tälle laitteelle, ja synkronoidaan palvelimelle yhteyden palauduttua. Saldojen tarkastelu ei ole mahdollista offline-tilassa. Tapahtumia jonossa: ${q.length}` : 'Luodut kirjaukset tallennetaan tälle laitteelle, ja synkronoidaan palvelimelle yhteyden palauduttua. Saldojen tarkastelu ei ole mahdollista offline-tilassa.'
-        if (lastUpdateEl) lastUpdateEl.textContent = `Viimeisin yhteys palvelimeen: ${humanizeTime(updatedAt)}`
+        if (lastUpdateEl) lastUpdateEl.textContent = `Viimeisin yhteys: ${humanizeTime(updatedAt)}`
+        if (countEl) countEl.textContent = q.length > 0 ? `Jonossa: ${q.length}` : ''
 
         if (listEl) {
             listEl.innerHTML = ''
@@ -517,20 +526,17 @@ const PiikkiOffline = (() => {
                 listEl.appendChild(div)
             })
         }
-
-        const badge = document.querySelector('#offline-badge')
-        if (badge) badge.textContent = q.length > 0 ? q.length : ''
     }
 
-    // The offline button replaces the statistics button whenever we're
-    // disconnected OR any buffered item is still waiting (incl. failed ones the
-    // user may want to retry/dismiss), so the panel is always reachable.
     const updateOfflineUI = () => {
-        const showButton = !connected || getQueueSize() > 0
-        const statsBtn = document.querySelector('#statistics-button')
-        const offlineBtn = document.querySelector('#offline-button')
-        if (statsBtn) statsBtn.style.display = showButton ? 'none' : ''
-        if (offlineBtn) offlineBtn.style.display = showButton ? '' : 'none'
+        const showOffline = !connected || getQueueSize() > 0
+        const indicator = document.querySelector('#offline-indicator')
+        if (indicator) {
+            indicator.classList.toggle('active', showOffline)
+            indicator.innerHTML = showOffline
+                ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960"><path d="M792-56 686-160H260q-92 0-156-64T40-380q0-77 47.5-137T210-594q3-8 6-15.5t6-16.5L56-792l56-56 736 736-56 56ZM260-240h346L284-562q-2 11-3 21t-1 21h-20q-58 0-99 41t-41 99q0 58 41 99t99 41Zm185-161Zm419 191-58-56q17-14 25.5-32.5T840-340q0-42-29-71t-71-29h-60v-80q0-83-58.5-141.5T480-720q-27 0-52 6.5T380-693l-58-58q35-24 74.5-36.5T480-800q117 0 198.5 81.5T760-520q69 8 114.5 59.5T920-340q0 39-15 72.5T864-210ZM593-479Z"/></svg>'
+                : ''
+        }
         renderPanel()
     }
 
@@ -566,7 +572,7 @@ const PiikkiOffline = (() => {
         clearCredentials,
         getUpdatedAt,
         enqueue,
-        makePurchaseItem,
+        makePurchaseBundle,
         makeSessionStartItem,
         makeSessionEndItem,
         sync,

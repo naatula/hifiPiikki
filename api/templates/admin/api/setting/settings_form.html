@@ -52,6 +52,24 @@
       </div>
       {% if form.pin_lockout_threshold.help_text %}<div class="help">{{ form.pin_lockout_threshold.help_text }}</div>{% endif %}
     </div>
+
+    <div class="form-row{% if form.negative_balance_limit.errors %} errors{% endif %}">
+      {{ form.negative_balance_limit.errors }}
+      <div>
+        {{ form.negative_balance_limit.label_tag }}
+        {{ form.negative_balance_limit }}
+      </div>
+      {% if form.negative_balance_limit.help_text %}<div class="help">{{ form.negative_balance_limit.help_text }}</div>{% endif %}
+    </div>
+
+    <div class="form-row{% if form.organization_name.errors %} errors{% endif %}">
+      {{ form.organization_name.errors }}
+      <div>
+        {{ form.organization_name.label_tag }}
+        {{ form.organization_name }}
+      </div>
+      {% if form.organization_name.help_text %}<div class="help">{{ form.organization_name.help_text }}</div>{% endif %}
+    </div>
   </fieldset>
 
   <fieldset class="module aligned">
