@@ -428,6 +428,7 @@ class SessionAdmin(MyModelAdmin):
     list_display = ('tab', 'started_at', 'ended_at', 'people', 'comment',)
     list_filter = ('tab', 'ended_at',)
     search_fields = ('tab__name',)
+    readonly_fields = ('client_uuid',)
     date_hierarchy = 'ended_at'
 
     def has_add_permission(self, request):
