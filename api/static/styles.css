@@ -1619,7 +1619,6 @@ footer {
     background: var(--grey2);
     color: var(--lightgrey);
     border: 1px solid var(--grey3);
-    border-left: 4px solid var(--grey3);
     border-radius: .75rem;
     box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .45);
     font-size: .9375rem;
@@ -1631,10 +1630,6 @@ footer {
     animation: toastOut .25s ease forwards;
 }
 
-.toast--success { border-left-color: var(--green); }
-.toast--update  { border-left-color: var(--yellow); }
-.toast--error   { border-left-color: var(--red); }
-.toast--info    { border-left-color: var(--grey3); }
 
 .toast__icon {
     flex-shrink: 0;
