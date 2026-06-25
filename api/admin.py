@@ -293,8 +293,7 @@ class PurchaseAdmin(MyModelAdmin):
 
     def delete_model(self, request, obj):
         with transaction.atomic():
-            obj.tab.balance += obj.total
-            obj.tab.save()
+            Tab.objects.filter(pk=obj.tab_id).update(balance=F('balance') + obj.total)
             # Restore stock for tracked products (mirrors the decrement on purchase).
             if obj.product_id is not None:
                 Product.objects.filter(
@@ -507,24 +506,21 @@ class TabAdjustmentAdmin(MyModelAdmin):
             is_new = obj.pk is None
             if is_new:
                 super().save_model(request, obj, form, change)
-                obj.tab.balance += obj.sum
+                Tab.objects.filter(pk=obj.tab_id).update(balance=F('balance') + obj.sum)
                 if form.cleaned_data.get('activate_tab') and not obj.tab.active:
-                    obj.tab.active = True
+                    Tab.objects.filter(pk=obj.tab_id, active=False).update(active=True)
                     messages.info(request, f"Tab '{obj.tab.name}' has been activated.")
-                obj.tab.save()
             else:
                 # Editing existing tab adjustment - adjust the difference
                 old_obj = TabAdjustment.objects.get(pk=obj.pk)
                 old_sum = old_obj.sum
                 super().save_model(request, obj, form, change)
                 difference = obj.sum - old_sum
-                obj.tab.balance += difference
-                obj.tab.save()
+                Tab.objects.filter(pk=obj.tab_id).update(balance=F('balance') + difference)
 
     def delete_model(self, request, obj):
         with transaction.atomic():
-            obj.tab.balance -= obj.sum
-            obj.tab.save()
+            Tab.objects.filter(pk=obj.tab_id).update(balance=F('balance') - obj.sum)
             super().delete_model(request, obj)
 
     def delete_queryset(self, request, queryset):

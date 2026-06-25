@@ -49,6 +49,10 @@ async function login(page, { remember = true } = {}) {
   if (!remember) await page.locator('#login-remember').uncheck()
   await page.locator('#login').click()
   await expect(page.locator('.main-panel')).toHaveClass(/active/, { timeout: 10_000 })
+  // Wait for login's trailing un-awaited fetches (sync, updateActiveSession,
+  // fetchTabs, fetchConfig) to settle. Without this, expireSession can race:
+  // a trailing response's Set-Cookie re-plants the session after clearCookies.
+  await page.waitForLoadState('networkidle')
 }
 
 // Open checkout for a product and select a tab so the confirm button enables.

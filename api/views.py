@@ -130,10 +130,10 @@ class PurchaseViewSet(viewsets.GenericViewSet):
                     client_uuid=it['client_uuid'],
                     occurred_at=occurred_at,
                 ))
-            tab.balance -= combined_total
+            update_fields = {'balance': F('balance') - combined_total}
             if tab.pin_required:
-                tab.pin_attempts = 0
-            tab.save()
+                update_fields['pin_attempts'] = 0
+            Tab.objects.filter(pk=tab.pk).update(**update_fields)
             if product is not None:
                 total_quantity = sum(it['quantity'] for it in parsed_items)
                 Product.objects.filter(
