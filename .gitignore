@@ -3,3 +3,4 @@ __pycache__
 /static/
 venv/
 .env
+/test-results/
