@@ -137,8 +137,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const showBalanceLimitToast = () => {
         PiikkiToast.show({
             id: 'purchase-error',
-            message: 'Saldon raja ylitetty — ostoa ei voitu tehdä',
-            variant: 'error', icon: 'error', duration: 5000, dismissible: true,
+            message: 'Saldo ylittyy — ostoa ei voitu tehdä',
+            variant: 'error', icon: 'error', duration: 4000, dismissible: true,
         })
     }
 
@@ -339,7 +339,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const names = blockedTabs.map(({ tab }) => tab.name).join(', ')
             PiikkiToast.show({
                 id: 'purchase-error',
-                message: `Saldon raja ylitetty: ${names}`,
+                message: `Piikkejä, joiden saldo ei riitä, ei veloitettu: ${names}`,
                 variant: 'error', icon: 'error', duration: 0, dismissible: true,
             })
             toMain()
@@ -399,13 +399,13 @@ document.addEventListener("DOMContentLoaded", async () => {
                     const names = [...result.balanceLimitedTabs].join(', ')
                     PiikkiToast.show({
                         id: 'purchase-error',
-                        message: `Saldon raja ylitetty: ${names}`,
+                        message: `Piikkejä, joiden saldo ei riitä, ei veloitettu: ${names}`,
                         variant: 'error', icon: 'error', duration: 0, dismissible: true,
                     })
                 } else {
                     PiikkiToast.show({
                         id: 'purchase-error',
-                        message: 'Osto epäonnistui osalle piikkejä — tarkista tilanne historiasta',
+                        message: 'Osto epäonnistui osalle piikeistä — tarkista tilanne historiasta',
                         variant: 'error', icon: 'error', duration: 0, dismissible: true,
                         actions: [{ label: 'Lataa uudelleen', primary: true, onClick: () => { location.reload() } }],
                     })
@@ -520,7 +520,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 } else {
                     PiikkiToast.show({
                         id: 'purchase-error',
-                        message: 'Osto ei mennyt läpi — tarkista tilanne historiasta',
+                        message: 'Osto epäonnistui — tarkista tilanne historiasta',
                         variant: 'error', icon: 'error', duration: 0, dismissible: true,
                         actions: [{ label: 'Lataa uudelleen', primary: true, onClick: () => { location.reload() } }],
                     })
@@ -1057,7 +1057,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // null on a clean first-load prompt.
     const showLoginError = (msg) => {
         if (!msg) return
-        PiikkiToast.show({ id: 'login-error', message: msg, variant: 'error', icon: 'error', duration: 6000 })
+        PiikkiToast.show({ id: 'login-error', message: msg, variant: 'error', icon: 'error', duration: 4000 })
     }
 
     const setLoginBusy = (isBusy) => {
@@ -1163,7 +1163,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             toLogin(PiikkiOffline.wasLoggedIn() ? 'Istunto vanhentunut — kirjaudu uudelleen' : null)
             return false
         }
-        PiikkiToast.show({ id: 'api-error', message: 'Palvelinvirhe — yritä uudelleen', variant: 'error', icon: 'error', duration: 5000 })
+        PiikkiToast.show({ id: 'api-error', message: 'Palvelinvirhe — yritä uudelleen', variant: 'error', icon: 'error', duration: 4000 })
         return false
     }
 
@@ -1365,7 +1365,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         if (!response.ok) {
             document.querySelector('#session-confirm').classList.remove('ok')
-            PiikkiToast.show({ id: 'session-error', message: 'Hostauksen aloitus epäonnistui', variant: 'error', icon: 'error', duration: 5000 })
+            PiikkiToast.show({ id: 'session-error', message: 'Hostauksen aloitus epäonnistui', variant: 'error', icon: 'error', duration: 4000 })
             closeSessionWindow()
             return
         }
@@ -1441,7 +1441,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             closeSessionWindow()
         } else {
             document.querySelector('#session-end').classList.remove('ok')
-            PiikkiToast.show({ id: 'session-error', message: 'Hostauksen lopetus epäonnistui', variant: 'error', icon: 'error', duration: 5000 })
+            PiikkiToast.show({ id: 'session-error', message: 'Hostauksen lopetus epäonnistui', variant: 'error', icon: 'error', duration: 4000 })
         }
     }
 
@@ -1503,7 +1503,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             element.append(nameSpan, balSpan)
             element.addEventListener('click', () => {
                 if (PiikkiOffline.isOffline()) {
-                    PiikkiToast.show({ id: 'offline-detail', message: 'Piikkitiedot eivät ole käytettävissä offline-tilassa', variant: 'error', icon: 'error', duration: 3000 })
+                    PiikkiToast.show({ id: 'offline-detail', message: 'Piikkitiedot eivät ole käytettävissä ilman yheyttä', variant: 'error', icon: 'error', duration: 4000 })
                     return
                 }
                 document.querySelectorAll('.statistics-tabs > div').forEach(el => el.classList.remove('selected'))
@@ -1773,7 +1773,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             PiikkiToast.show({
                 id: 'sync-result',
                 message: `Synkronointi: ${result.ok} onnistui, ${result.failed} epäonnistui`,
-                variant: 'error', icon: 'error', duration: 6000,
+                variant: 'error', icon: 'error', duration: 4000,
             })
         } else if (result.ok > 0) {
             PiikkiToast.show({
