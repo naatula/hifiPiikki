@@ -47,12 +47,11 @@ Järjestelmä on suunniteltu siten, että kaikki tilisaldon muutokset ovat jälj
 
 Käyttäjänäkymä on progressiivinen web-sovellus (PWA), joka toimii myös ilman jatkuvaa verkkoyhteyttä.
 
-- **Puskurointi:** Offline-tilassa ostot sekä hostauksen aloitus ja lopetus tallentuvat selaimen `localStorage`-jonoon ja synkronoidaan palvelimelle, kun yhteys palaa. Tuote- ja piikkilistat sekä aktiivinen hostaus näytetään välimuistista.
-- **Offline-painike:** Yhteyden katketessa tilastopainike korvautuu punaisella offline-painikkeella. Painike avaa paneelin, jossa näkyvät jonossa olevat toiminnot, viimeisin palvelinyhteys ja "Synkronoi"-painike.
+- **Puskurointi:** Offline-tilassa ostot sekä hostauksen aloitus ja lopetus tallentuvat selaimen `localStorage`-jonoon ja synkronoidaan palvelimelle, kun yhteys palaa. Tuote- ja piikkilistat sekä aktiivinen hostaus näytetään välimuistista. Tilastopaneelista näkee, jossa näkyvät jonossa olevat toiminnot, viimeisin palvelinyhteys ja "Synkronoi"-painike.
 - **Pysyvyys:** Offline-tila pysyy päällä, kunnes kaikki jonossa olevat toiminnot on synkronoitu — myös sivun uudelleenlatauksen yli. Yhteys tarkistetaan taustalla ja synkronointi käynnistyy automaattisesti yhteyden palatessa; lisäksi sen voi käynnistää käsin.
 - **Idempotenssi:** Jokainen puskuroitu toiminto saa oman `client_uuid`-tunnisteen, joten palvelin ei kirjaa samaa ostoa tai hostausta kahdesti, vaikka synkronointi yritettäisiin uudelleen.
 - **Aikaleimat:** Ostot kirjataan todelliseen tapahtuma-aikaan (`occurred_at`), ei synkronointihetkeen, jotta tilastot ja suositukset pysyvät oikein. `created_at` säilyy palvelimen kirjaushetkenä.
-- **Rajoitukset offline-tilassa:** PIN-suojattuja piikkejä ei voi käyttää (PIN tarkistetaan vain palvelimella) eikä tilastonäkymää voi avata. Shelly-laitetta ei ohjata jälkikäteen synkronoiduista hostauksista.
+- **Rajoitukset offline-tilassa:** PIN-suojattuja piikkejä ei voi käyttää (PIN tarkistetaan vain palvelimella) eikä tilastonäkymästä voi avata yksittäisten piikkien lisätietoja. Shelly-laitetta ei ohjata jälkikäteen synkronoiduista hostauksista.
 - **Epäonnistuneet synkronoinnit:** Palvelimen hylkäämät (4xx) toiminnot merkitään virheellisiksi ja ne voi poistaa jonosta yksitellen; tilapäiset verkkovirheet yritetään automaattisesti uudelleen.
 - **Service worker:** `api/static/sw.js` tarjoilee sovelluksen myös offline-tilassa ja huolehtii automaattisista päivityksistä (ks. `CACHE_VERSION` yllä).
 
