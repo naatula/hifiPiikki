@@ -358,8 +358,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         busy = true
 
         if (PiikkiOffline.isOffline()) {
-            for (const { tab } of selectedTabs.values()) {
-                enqueuePurchaseItems(items, tab)
+            for (const { tab, pin } of selectedTabs.values()) {
+                enqueuePurchaseItems(items, tab, pin)
                 deductLocalBalance(tab.id, items)
             }
             document.querySelector('#confirmation').classList.add('ok')
@@ -370,8 +370,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const token = await getCsrfToken()
         if (!token) {
-            for (const { tab } of selectedTabs.values()) {
-                enqueuePurchaseItems(items, tab)
+            for (const { tab, pin } of selectedTabs.values()) {
+                enqueuePurchaseItems(items, tab, pin)
                 deductLocalBalance(tab.id, items)
             }
             document.querySelector('#confirmation').classList.add('ok')
@@ -392,7 +392,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 result = await runPurchaseAttempts(bundles, true)
             } catch {
                 for (const b of bundles) {
-                    enqueuePurchaseItems(b.items, b.tab)
+                    enqueuePurchaseItems(b.items, b.tab, b.pin)
                     deductLocalBalance(b.tab.id, b.items)
                 }
                 busy = false
@@ -462,20 +462,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         })
     }
 
-    const enqueuePurchaseItems = (items, tab) => {
+    const enqueuePurchaseItems = (items, tab, pin = null) => {
         const productName = checkoutProduct ? checkoutProduct.name : 'Oma summa'
-        PiikkiOffline.enqueue(PiikkiOffline.makePurchaseBundle(
-            {
-                tab: tab.id,
-                product: checkoutProduct?.id,
-                items: items.map(it => ({
-                    quantity: it.quantity, total: it.total,
-                    price_type: it.price_type || null,
-                    client_uuid: it.client_uuid || crypto.randomUUID(),
-                })),
-            },
-            productName, tab.name
-        ))
+        const body = {
+            tab: tab.id,
+            product: checkoutProduct?.id,
+            items: items.map(it => ({
+                quantity: it.quantity, total: it.total,
+                price_type: it.price_type || null,
+                client_uuid: it.client_uuid || crypto.randomUUID(),
+            })),
+        }
+        if (pin != null) body.pin = pin
+        PiikkiOffline.enqueue(PiikkiOffline.makePurchaseBundle(body, productName, tab.name))
     }
 
     const confirmPurchase = async () => {

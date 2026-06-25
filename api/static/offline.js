@@ -189,10 +189,12 @@ const PiikkiOffline = (() => {
             ...it,
             client_uuid: it.client_uuid || crypto.randomUUID(),
         }))
+        const purchaseBody = { tab: body.tab, product: body.product, occurred_at: occurredAt, items }
+        if (body.pin != null) purchaseBody.pin = body.pin
         return {
             id: crypto.randomUUID(),
             type: 'purchase',
-            body: { tab: body.tab, product: body.product, occurred_at: occurredAt, items },
+            body: purchaseBody,
             productName,
             tabName,
             occurredAt,
