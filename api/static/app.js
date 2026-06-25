@@ -812,6 +812,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const applyAppConfig = () => {
         const button = document.querySelector('.quick-payment')
         if (button) button.style.display = appConfig.custom_amount_enabled ? '' : 'none'
+        const nav = document.querySelector('.navigation')
+        if (nav) nav.style.marginBottom = appConfig.custom_amount_enabled ? '' : '1rem'
     }
 
 
