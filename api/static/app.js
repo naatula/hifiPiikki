@@ -289,12 +289,21 @@ document.addEventListener("DOMContentLoaded", async () => {
     const verifyPinForTabSelection = async (pin, allowReauth = true) => {
         const tab = multiTabPinPendingTab
         if (!tab) return
-        const token = await getCsrfToken()
-        const response = await fetch(`../api/tabs/${tab.id}/verify_pin/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
-            body: JSON.stringify({ pin })
-        })
+        let response
+        try {
+            const token = await getCsrfToken()
+            response = await fetch(`../api/tabs/${tab.id}/verify_pin/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token },
+                body: JSON.stringify({ pin })
+            })
+        } catch (e) {
+            enteredPin = ''
+            document.querySelectorAll('#pinpad .pin-dot').forEach(dot => dot.classList.remove('filled'))
+            document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = false)
+            PiikkiToast.show({ id: 'pin-error', message: 'Yhteys palvelimeen epäonnistui', variant: 'error', icon: 'error', duration: 4000, dismissible: true })
+            return
+        }
         if (response.status === 200) {
             selectedTabs.set(tab.id, { tab, pin })
             if (tabsById[tab.id]) tabsById[tab.id].pin_attempts = 0
@@ -545,8 +554,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             return
         }
 
-        const token = await getCsrfToken()
-        const response = await postPurchases(items, pin, token, tab)
+        let response
+        try {
+            const token = await getCsrfToken()
+            response = await postPurchases(items, pin, token, tab)
+        } catch (e) {
+            enteredPin = ''
+            document.querySelectorAll('#pinpad .pin-dot').forEach(dot => dot.classList.remove('filled'))
+            document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = false)
+            PiikkiToast.show({ id: 'pin-error', message: 'Yhteys palvelimeen epäonnistui', variant: 'error', icon: 'error', duration: 4000, dismissible: true })
+            return
+        }
         if (response.ok) {
             busy = true
             hidePinpad()
@@ -1651,15 +1669,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     const submitStatisticsPin = async (pin, allowReauth = true) => {
         const tab = statisticsPinTab
         if(!tab) return
-        const token = await getCsrfToken()
-        const response = await fetch(`../api/tabs/${tab.id}/set_pin_required/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': token
-            },
-            body: JSON.stringify({ pin: pin, pin_required: statisticsDesiredPinRequired })
-        })
+        let response
+        try {
+            const token = await getCsrfToken()
+            response = await fetch(`../api/tabs/${tab.id}/set_pin_required/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': token
+                },
+                body: JSON.stringify({ pin: pin, pin_required: statisticsDesiredPinRequired })
+            })
+        } catch (e) {
+            statisticsEnteredPin = ''
+            document.querySelectorAll('#statistics-pinpad .pin-dot').forEach(dot => dot.classList.remove('filled'))
+            document.querySelectorAll('#statistics-pinpad .pin-key').forEach(btn => btn.disabled = false)
+            PiikkiToast.show({ id: 'pin-error', message: 'Yhteys palvelimeen epäonnistui', variant: 'error', icon: 'error', duration: 4000, dismissible: true })
+            return
+        }
         if(response.status === 200) {
             const updated = await response.json()
             tab.pin_required = !!updated.pin_required
