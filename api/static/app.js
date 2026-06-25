@@ -844,7 +844,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         if (PiikkiOffline.isOffline() && tabObj.pin_required) {
-            PiikkiToast.show({ id: 'pin-offline', message: 'PIN-piikki ei ole käytettävissä offline-tilassa', variant: 'error', icon: 'error', duration: 4000 })
+            PiikkiToast.show({ id: 'pin-offline', message: 'PIN-suojatut piikit eivät ole käytettävissä offline-tilassa', variant: 'error', icon: 'error', duration: 4000 })
             return
         }
 
