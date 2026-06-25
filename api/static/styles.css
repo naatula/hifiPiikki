@@ -124,6 +124,7 @@ body {
     display: flex;
     flex-direction: row;
     left: -100%;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .checkout-panel {
@@ -132,6 +133,7 @@ body {
     flex-direction: column;
     justify-content: flex-start;
     align-items: stretch;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .checkout-panel:not(.active) * {
