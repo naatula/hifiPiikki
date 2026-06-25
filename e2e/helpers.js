@@ -10,9 +10,12 @@ const PY = path.join(ROOT, 'venv', 'bin', 'python')
 const USER = 'claude'
 const PASSWORD = 'claude'
 const PRODUCT = 'E2E Olut'
-const TAB = 'E2E Testi'        // non-PIN tab
-const TAB2 = 'E2E Testi 2'    // second non-PIN tab (for multi-tab tests)
-const PIN_TAB = 'E2E PIN'      // PIN-protected tab
+const PRODUCT_INOUT = 'E2E Sisu'    // distinct in/out prices (2.00 / 4.00)
+const PRODUCT_STOCK = 'E2E Limu'    // stock-tracked product (stock_quantity=10)
+const TAB = 'E2E Testi'             // non-PIN tab
+const TAB2 = 'E2E Testi 2'         // second non-PIN tab (for multi-tab tests)
+const PIN_TAB = 'E2E PIN'           // PIN-protected tab
+const INACTIVE_TAB = 'E2E Suljettu' // inactive tab with balance
 const PIN_CODE = '123456'
 const PIN_LOCKOUT_THRESHOLD = 3
 
@@ -26,6 +29,9 @@ const countSessions = () => Number(seed('session-count'))
 const countActiveSessions = () => Number(seed('active-session-count'))
 const tabBalance = (name) => parseFloat(seed('tab-balance', name))
 const pinAttempts = (name) => Number(seed('pin-attempts', name))
+const productStock = (name) => parseFloat(seed('product-stock', name))
+const setSetting = (key, value) => seed('setting', key, value)
+const tabAdjust = (name, sum, desc = '') => seed('tab-adjust', name, sum, desc)
 
 // localStorage probes.
 const queue = (page) => page.evaluate(() => JSON.parse(localStorage.getItem('piikki.queue') || '[]'))
@@ -79,6 +85,14 @@ async function goOnline(page) {
   await page.unroute('**/api/**')
 }
 
+// Set a quantity input to a specific value (clears first, then types).
+async function setQuantity(page, inputId, value) {
+  const input = page.locator(`${inputId}`)
+  await input.fill(String(value))
+  // Trigger the change handler used by updateConfirmation.
+  await input.dispatchEvent('change')
+}
+
 // Chromium automation fires a spurious popstate event that races with
 // PiikkiBack's history-based overlay tracking, closing panels immediately
 // after they open. Call before login on tests that open overlay panels.
@@ -89,9 +103,11 @@ async function blockPopstate(context) {
 }
 
 module.exports = {
-  USER, PASSWORD, PRODUCT, TAB, TAB2, PIN_TAB, PIN_CODE, PIN_LOCKOUT_THRESHOLD,
+  USER, PASSWORD, PRODUCT, PRODUCT_INOUT, PRODUCT_STOCK,
+  TAB, TAB2, PIN_TAB, INACTIVE_TAB, PIN_CODE, PIN_LOCKOUT_THRESHOLD,
   seed, countPurchases, countSessions, countActiveSessions, tabBalance, pinAttempts,
+  productStock, setSetting, tabAdjust,
   queue, storedCreds, loginShown, expireSession,
   login, startPurchase, selectCheckoutTab, confirmPurchase, enterPin,
-  expectQueueEmpty, goOffline, goOnline, blockPopstate,
+  expectQueueEmpty, goOffline, goOnline, blockPopstate, setQuantity,
 }

@@ -8,12 +8,16 @@ Run from the repo root via the venv interpreter, e.g.:
 
 Commands:
     baseline             Ensure the e2e user + fixtures exist (idempotent).
-    reset                Hard-delete all purchases/sessions, zero e2e tab balances.
+    reset                Hard-delete all purchases/sessions/adjustments, zero e2e
+                         tab balances, restore config defaults.
     purchase-count       Print the number of (live) purchases.
     session-count        Print the number of (live) sessions.
     active-session-count Print the number of sessions with ended_at IS NULL.
     tab-balance <name>   Print a tab's balance.
     pin-attempts <name>  Print a tab's pin_attempts count.
+    setting <key> <val>  Write a Setting row.
+    product-stock <name> Print a product's stock_quantity (or NA if untracked).
+    tab-adjust <name> <sum> [desc]  Create a TabAdjustment and bump the tab balance.
 
 Only touches the database (models), so it is independent of DEBUG /
 FORCE_SCRIPT_NAME / .env routing config.
@@ -29,7 +33,7 @@ import django  # noqa: E402
 django.setup()
 
 from django.contrib.auth.models import User  # noqa: E402
-from api.models import Tab, Product, ProductGroup, Session, Purchase, Setting  # noqa: E402
+from api.models import Tab, Product, ProductGroup, Session, Purchase, Setting, TabAdjustment  # noqa: E402
 
 try:
     from safedelete.models import HARD_DELETE
@@ -43,7 +47,10 @@ NONPIN_TAB2 = "E2E Testi 2"
 PIN_TAB = "E2E PIN"
 PIN_CODE = "123456"
 PRODUCT = "E2E Olut"
+PRODUCT_INOUT = "E2E Sisu"
+PRODUCT_STOCK = "E2E Limu"
 GROUP = "E2E Juomat"
+INACTIVE_TAB = "E2E Suljettu"
 PIN_LOCKOUT_THRESHOLD = 3
 
 
@@ -68,6 +75,17 @@ def baseline():
         name=PRODUCT,
         defaults={"price_in": "3.00", "price_out": "3.00", "group": group, "in_stock": True},
     )
+    Product.objects.get_or_create(
+        name=PRODUCT_INOUT,
+        defaults={"price_in": "2.00", "price_out": "4.00", "group": group, "in_stock": True},
+    )
+    Product.objects.get_or_create(
+        name=PRODUCT_STOCK,
+        defaults={
+            "price_in": "2.00", "price_out": "2.00", "group": group, "in_stock": True,
+            "stock_quantity": "10", "low_stock_threshold": "2",
+        },
+    )
     Tab.objects.get_or_create(
         name=NONPIN_TAB,
         defaults={"balance": "0.00", "active": True, "pin_required": False},
@@ -80,6 +98,10 @@ def baseline():
         name=PIN_TAB,
         defaults={"balance": "0.00", "active": True, "pin_required": True, "pin": PIN_CODE},
     )
+    Tab.objects.get_or_create(
+        name=INACTIVE_TAB,
+        defaults={"balance": "-5.00", "active": False},
+    )
     Setting.objects.update_or_create(
         key="pin_lockout_threshold",
         defaults={"value": str(PIN_LOCKOUT_THRESHOLD)},
@@ -90,12 +112,20 @@ def baseline():
 def reset():
     _hard(_all(Purchase))
     _hard(_all(Session))
+    _hard(_all(TabAdjustment))
     Tab.objects.filter(name__in=[NONPIN_TAB, NONPIN_TAB2]).update(
         balance="0.00", pin_attempts=0, pin_required=False
     )
     Tab.objects.filter(name=PIN_TAB).update(
         balance="0.00", pin_attempts=0, pin_required=True
     )
+    Tab.objects.filter(name=INACTIVE_TAB).update(
+        balance="-5.00", active=False
+    )
+    Product.objects.filter(name=PRODUCT_STOCK).update(stock_quantity="10")
+    # Restore config defaults so tests don't bleed.
+    Setting.objects.update_or_create(key="cash_enabled", defaults={"value": "false"})
+    Setting.objects.update_or_create(key="custom_amount_enabled", defaults={"value": "true"})
     print("reset ok")
 
 
@@ -117,6 +147,24 @@ def main(argv):
     elif cmd == "pin-attempts":
         tab = Tab.objects.filter(name=argv[2]).first()
         print(tab.pin_attempts if tab else "NA")
+    elif cmd == "setting":
+        Setting.objects.update_or_create(key=argv[2], defaults={"value": argv[3]})
+        print("ok")
+    elif cmd == "product-stock":
+        prod = Product.objects.filter(name=argv[2]).first()
+        print(prod.stock_quantity if prod and prod.stock_quantity is not None else "NA")
+    elif cmd == "tab-adjust":
+        tab = Tab.objects.filter(name=argv[2]).first()
+        if not tab:
+            print("NA", file=sys.stderr)
+            sys.exit(1)
+        adj_sum = argv[3]
+        desc = argv[4] if len(argv) > 4 else ""
+        from decimal import Decimal
+        TabAdjustment.objects.create(tab=tab, sum=adj_sum, description=desc)
+        tab.balance = Decimal(str(tab.balance)) + Decimal(adj_sum)
+        tab.save()
+        print("ok")
     else:
         print("unknown command: %s" % cmd, file=sys.stderr)
         sys.exit(1)

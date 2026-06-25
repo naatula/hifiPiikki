@@ -45,19 +45,41 @@ concurrent writes break the exact row-count assertions.
 |------|--------|--------|
 | `auth.spec.js` | ✅ | login render, wrong creds, success + credential storage, silent re-auth on read expiry, login fallback without creds |
 | `expiry-recovery.spec.js` | ✅ | the regression guard — purchase / session start / session end while the session expires; buffered → re-authed → replayed once, no double-charge |
-| `purchases.spec.js` | ✅ | single + custom-amount purchase happy paths |
-| `sessions.spec.js` | ✅ | start + end a host session |
+| `purchases.spec.js` | ✅ | single + custom-amount purchase, quantity steppers (multiples + decimals), dual in/out price product |
+| `sessions.spec.js` | ✅ | start + end a host session, people/comment validation errors, session summary totals |
 | `pin.spec.js` | ✅ | PIN purchase (correct/wrong/locked), PIN-tab expiry recovery, set_pin_required |
 | `multitab.spec.js` | ✅ | multi-tab split, with-PIN, expiry recovery |
-| `statistics.spec.js` | ✅ | tab list, detail, balance adjustment |
+| `statistics.spec.js` | ✅ | tab list, detail, balance adjustment, adjustment line ("Viimeisin suoritus"/"Ei suorituksia"), inactive tab status, purchase list + empty state |
+| `cash.spec.js` | ✅ | cash row visibility (cash_enabled toggle), cash purchase (total=0, no balance move) |
+| `inventory.spec.js` | ✅ | stock_quantity decrement on purchase (single + multi-qty), cash purchase stock decrement |
+| `navigation.spec.js` | ✅ | checkout back arrow, session/statistics close buttons, statistics detail back, config-driven visibility (custom_amount_enabled) |
 | `offline.spec.js` | ✅ | queue offline, sync on reconnect, offline restrictions, persistence, failed-item handling |
 
 ## Helpers (`helpers.js`)
 
 - `login(page, { remember })`, `startPurchase`, `selectCheckoutTab`, `confirmPurchase`
 - `enterPin(page, pin, selector)` — types a 6-digit PIN on whichever keypad is visible
+- `setQuantity(page, inputId, value)` — sets a quantity input and dispatches a change event
 - `goOffline(page)` / `goOnline(page)` — route-level network simulation (aborts `/api/**`)
 - `expireSession(context)` — drops cookies to simulate a server-side session expiry (an auth lapse, not an offline outage)
 - `expectQueueEmpty(page)` — waits for the offline queue to drain (recovery done)
 - `blockPopstate(context)` — neutralises Chromium's spurious popstate events that close PiikkiBack-tracked overlay panels
 - `seed(...)`, `countPurchases()`, `countSessions()`, `countActiveSessions()`, `tabBalance(name)`, `pinAttempts(name)` — server-side assertions via `seed.py`
+- `productStock(name)` — reads a product's `stock_quantity` via `seed.py`
+- `setSetting(key, value)` — writes a `Setting` row (e.g. `cash_enabled`, `custom_amount_enabled`)
+- `tabAdjust(name, sum, desc)` — creates a `TabAdjustment` and bumps the tab balance
+
+### `seed.py` commands
+
+| Command | Description |
+|---------|-------------|
+| `baseline` | Ensure the e2e user + fixtures exist (idempotent) |
+| `reset` | Hard-delete all purchases/sessions/adjustments, zero e2e tab balances, restore config defaults |
+| `purchase-count` | Print the number of (live) purchases |
+| `session-count` | Print the number of (live) sessions |
+| `active-session-count` | Print the number of sessions with `ended_at IS NULL` |
+| `tab-balance <name>` | Print a tab's balance |
+| `pin-attempts <name>` | Print a tab's `pin_attempts` count |
+| `setting <key> <value>` | Write a Setting row |
+| `product-stock <name>` | Print a product's `stock_quantity` (or `NA`) |
+| `tab-adjust <name> <sum> [desc]` | Create a TabAdjustment and bump the tab balance |
