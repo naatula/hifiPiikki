@@ -1529,6 +1529,9 @@ footer {
 .offline-queue-list {
     flex: 1;
     overflow-y: auto;
+}
+
+.offline-queue-list:not(:empty) {
     margin-bottom: .75rem;
 }
 

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'piikki-v3.13'
+const CACHE_VERSION = 'piikki-v3.14'
 
 // Core shell: must ALL cache or the install aborts, leaving the previous
 // (working) service worker in control rather than activating a half-broken
