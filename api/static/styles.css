@@ -1487,6 +1487,13 @@ footer {
     font-weight: 400;
 }
 
+.offline-queue-section .offline-explanation {
+    font-size: .8rem;
+    color: var(--lightgrey);
+    opacity: .7;
+    margin-bottom: .5rem;
+}
+
 .offline-queue-section .offline-last-update {
     font-size: .8rem;
     color: var(--lightgrey);
@@ -1514,9 +1521,8 @@ footer {
 }
 
 .offline-queue-section #offline-sync.disabled {
-    background-color: var(--grey2);
+    background-color: #3d1a1a;
     color: var(--grey3);
-    opacity: .5;
     pointer-events: none;
 }
 
@@ -1533,13 +1539,14 @@ footer {
     gap: .25rem .5rem;
     padding: .5rem;
     border-radius: .5rem;
-    background-color: var(--grey2);
+    background-color: #3d1a1a;
     margin-bottom: .25rem;
     font-size: .875rem;
 }
 
 .offline-queue-item.failed {
     border-left: 3px solid var(--red);
+    background-color: #451515;
 }
 
 .offline-item-desc {
