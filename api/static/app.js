@@ -1400,7 +1400,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         if(e.target !== e.currentTarget) return
         closeSessionWindow()
     }))
-    document.querySelector('#session-info').addEventListener('click', openSessionWindow)
+    document.querySelector('#session-info').addEventListener('click', (e) => {
+        e.preventDefault()
+        openSessionWindow()
+    })
 
     // Statistics panel functions
     const openStatisticsWindow = async (allowReauth = true) => {
