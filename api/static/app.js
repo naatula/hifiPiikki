@@ -1545,7 +1545,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             element.append(nameSpan, balSpan)
             element.addEventListener('click', () => {
                 if (PiikkiOffline.isOffline()) {
-                    PiikkiToast.show({ id: 'offline-detail', message: 'Piikkitiedot eivät ole käytettävissä ilman yheyttä', variant: 'error', icon: 'error', duration: 4000 })
+                    PiikkiToast.show({ id: 'offline-detail', message: 'Piikkitiedot eivät ole käytettävissä ilman yhteyttä palvelimeen', variant: 'error', icon: 'error', duration: 4000 })
                     return
                 }
                 document.querySelectorAll('.statistics-tabs > div').forEach(el => el.classList.remove('selected'))
