@@ -407,7 +407,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         id: 'purchase-error',
                         message: 'Osto epäonnistui osalle piikeistä — tarkista tilanne historiasta',
                         variant: 'error', icon: 'error', duration: 0, dismissible: true,
-                        actions: [{ label: 'Lataa uudelleen', primary: true, onClick: () => { location.reload() } }],
                     })
                 }
             } else {
@@ -522,7 +521,6 @@ document.addEventListener("DOMContentLoaded", async () => {
                         id: 'purchase-error',
                         message: 'Osto epäonnistui — tarkista tilanne historiasta',
                         variant: 'error', icon: 'error', duration: 0, dismissible: true,
-                        actions: [{ label: 'Lataa uudelleen', primary: true, onClick: () => { location.reload() } }],
                     })
                     toMain()
                 }
