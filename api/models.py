@@ -41,15 +41,15 @@ def get_custom_amount_enabled():
 
 
 def get_negative_balance_limit():
-    """Return the negative balance limit as a positive Decimal, or None if
-    unset/empty (which means no limit)."""
+    """Return the minimum allowed balance as a Decimal, or None if
+    unset/empty (which means no limit).  Accepts any number: negative
+    (e.g. -100 → balance can't drop below -100), zero, or positive."""
     setting = Setting.objects.filter(key='negative_balance_limit').first()
     if setting is None or setting.value is None or str(setting.value).strip() == '':
         return None
     try:
         from decimal import Decimal, InvalidOperation
-        val = Decimal(str(setting.value).strip())
-        return val if val > 0 else None
+        return Decimal(str(setting.value).strip())
     except (InvalidOperation, ValueError):
         return None
 

@@ -112,7 +112,7 @@ class PurchaseViewSet(viewsets.GenericViewSet):
 
         if not tab.ignore_balance_limit:
             limit = get_negative_balance_limit()
-            if limit is not None and tab.balance - combined_total < -limit:
+            if limit is not None and tab.balance - combined_total < limit:
                 return Response(
                     {'error': 'balance_limit', 'limit': str(limit)},
                     status=400,
@@ -395,13 +395,9 @@ def csrf(request):
 def config(request):
     """Public client config. Whitelisted keys only — never dump the whole
     Setting table, which holds Shelly cloud credentials."""
-    from .models import Setting
     limit = get_negative_balance_limit()
-    org = Setting.objects.filter(key='organization_name').first()
-    org_name = org.value if org and org.value else ''
     return Response({
         'cash_enabled': get_cash_enabled(),
         'custom_amount_enabled': get_custom_amount_enabled(),
         'negative_balance_limit': str(limit) if limit is not None else None,
-        'organization_name': org_name,
     })

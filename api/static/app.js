@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // optional "Käteinen" (cash) checkout row and the "Oma summa" button.
     // custom_amount defaults on so an outage before the first config load keeps
     // the long-standing feature visible.
-    var appConfig = { cash_enabled: false, custom_amount_enabled: true, organization_name: '', negative_balance_limit: null }
+    var appConfig = { cash_enabled: false, custom_amount_enabled: true, negative_balance_limit: null }
 
     const tabsById = {}
     var enteredPin = ''
@@ -131,7 +131,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const tabData = tabsById[tab.id]
         if (!tabData || tabData.ignore_balance_limit) return false
         const total = items.reduce((s, it) => s + parseFloat(it.total), 0)
-        return (parseFloat(tabData.balance) - total) < -parseFloat(limit)
+        return (parseFloat(tabData.balance) - total) < parseFloat(limit)
     }
 
     const showBalanceLimitToast = () => {
@@ -796,8 +796,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     const applyAppConfig = () => {
         const button = document.querySelector('.quick-payment')
         if (button) button.style.display = appConfig.custom_amount_enabled ? '' : 'none'
-        const name = appConfig.organization_name || 'hifiPiikki'
-        document.querySelector('.login-title').textContent = name
     }
 
 
