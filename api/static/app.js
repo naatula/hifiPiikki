@@ -901,6 +901,28 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelector('#session-confirm').classList.remove('disabled')
     }
 
+    // Re-apply selection highlights after the tab DOM is rebuilt (e.g. a
+    // reconnect refetch). Keeps the visual selection in sync with
+    // checkoutTab/selectedTabs and drops any selection whose tab vanished
+    // from the refetched list.
+    const reapplyTabSelection = () => {
+        const mark = (id) => document.querySelectorAll(
+            `.checkout-panel .tab-list .tabs > div[data-id="${id}"],` +
+            `.checkout-panel .tab-list .suggestions > div[data-id="${id}"]`
+        ).forEach(el => el.classList.add('selected'))
+
+        if (multiTabMode) {
+            for (const id of [...selectedTabs.keys()]) {
+                if (!tabsById[id]) selectedTabs.delete(id)
+                else mark(id)
+            }
+        } else if (checkoutTab !== null) {
+            if (!tabsById[checkoutTab.id]) checkoutTab = null
+            else mark(checkoutTab.id)
+        }
+        updateConfirmation()
+    }
+
     const renderTabs = (tabs) => {
         const alphabetContainer = document.querySelector('.checkout-panel .alphabet')
         const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ"
@@ -954,6 +976,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 matches.forEach((y) => blink(y))
             })
         })
+        reapplyTabSelection()
     }
 
     const fetchTabs = async (allowReauth = true) => {
