@@ -1795,7 +1795,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const result = category.pop().id
             const marker = document.querySelector('.navigation > div')
             const active = document.querySelector(`.navigation a[data-id="${result}"]`)
-            marker.style = `top: ${active.offsetTop}px; height: ${active.offsetHeight}px`
+            marker.style = `top: ${active.offsetTop}px; height: ${active.offsetHeight - 2}px`
         }
     }
 
