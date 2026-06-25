@@ -1514,7 +1514,6 @@ footer {
     margin-top: .5rem;
     text-align: center;
     padding: .5rem;
-    background-color: var(--green);
     border-radius: .5rem;
     cursor: pointer;
     font-size: .875rem;
@@ -1532,7 +1531,7 @@ footer {
 }
 
 .offline-queue-list:not(:empty) {
-    margin-bottom: .75rem;
+    margin-top: .25rem;
 }
 
 .offline-queue-item {
@@ -1573,13 +1572,6 @@ footer {
     flex-shrink: 0;
 }
 
-
-/* PIN-disabled tabs in offline mode */
-.tab-list .tabs > div.pin-disabled,
-.tab-list .suggestions > div.pin-disabled {
-    opacity: .35;
-    pointer-events: none;
-}
 
 /* ---- Toasts (unified notification system, see toast.js) ---- */
 

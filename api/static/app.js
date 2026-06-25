@@ -843,7 +843,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             "pin_locked": tabData ? !!tabData.pin_locked : false
         }
 
-        if (PiikkiOffline.isOffline() && tabObj.pin_required) return
+        if (PiikkiOffline.isOffline() && tabObj.pin_required) {
+            PiikkiToast.show({ id: 'pin-offline', message: 'PIN-piikki ei ole käytettävissä offline-tilassa', variant: 'error', icon: 'error', duration: 4000 })
+            return
+        }
 
         if (!multiTabMode) {
             document.querySelectorAll('.checkout-panel .tab-list .tabs > div, .checkout-panel .tab-list .suggestions > div').forEach((x) => x.classList.remove('selected'))
@@ -893,7 +896,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             const element = document.createElement('div')
             element.dataset.id = x.id
             element.textContent = x.name
-            if (PiikkiOffline.isOffline() && x.pin_required) element.classList.add('pin-disabled')
             document.querySelector('.checkout-panel .tab-list .tabs').appendChild(element)
             element.addEventListener('click', () => selectTab(element))
         })
@@ -901,7 +903,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             const element = document.createElement('div')
             element.dataset.id = x.id
             element.textContent = x.name
-            if (PiikkiOffline.isOffline() && x.pin_required) element.classList.add('pin-disabled')
             document.querySelector('.checkout-panel .tab-list .suggestions').appendChild(element)
             element.addEventListener('click', () => selectTab(element))
         })
@@ -1753,7 +1754,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         btn.textContent = 'Synkronoidaan...'
         const result = await PiikkiOffline.sync()
         btn.classList.remove('disabled')
-        btn.textContent = 'Synkronoi'
+        btn.textContent = 'Yritä uudelleen'
         if (result.busy) return
         if (!result.ran) {
             PiikkiToast.show({

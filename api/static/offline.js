@@ -505,7 +505,7 @@ const PiikkiOffline = (() => {
         if (countEl) countEl.textContent = q.length > 0 ? `Jonossa: ${q.length}` : ''
 
         const syncBtn = section.querySelector('#offline-sync')
-        if (syncBtn) syncBtn.style.display = q.length > 0 ? '' : 'none'
+        if (syncBtn) syncBtn.style.display = q.some(i => i.status === 'failed') ? '' : 'none'
 
         if (listEl) {
             listEl.innerHTML = ''
