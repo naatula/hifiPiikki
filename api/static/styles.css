@@ -1089,6 +1089,11 @@ input[type=radio]:checked + label {
     width: 100%;
     margin-top: 1rem;
     text-align: center;
+    transition: background-color .2s;
+}
+
+.session-window .button.ok {
+    background-color: var(--green);
 }
 
 

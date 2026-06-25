@@ -1266,6 +1266,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.querySelector('.session-panel').classList.remove('closing')
             document.querySelectorAll('#session-tab-list .selected').forEach((x) => x.classList.remove('selected'))
             document.querySelector('#session-confirm').classList.add('disabled')
+            document.querySelector('#session-confirm').classList.remove('ok')
+            document.querySelector('#session-end').classList.remove('ok')
             document.querySelectorAll('.session-end-form input').forEach(input => input.classList.remove('error'));
         }, 200)
 
@@ -1276,6 +1278,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if(tab === null) return
         const tabId = parseInt(tab.dataset.id)
         const tabName = tab.textContent
+        document.querySelector('#session-confirm').classList.add('ok')
 
         if (PiikkiOffline.isOffline()) {
             const item = PiikkiOffline.makeSessionStartItem(tabId, tabName)
@@ -1314,6 +1317,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             return
         }
         if (!response.ok) {
+            document.querySelector('#session-confirm').classList.remove('ok')
             PiikkiToast.show({ id: 'session-error', message: 'Hostauksen aloitus epäonnistui', variant: 'error', icon: 'error', duration: 5000 })
             closeSessionWindow()
             return
@@ -1344,6 +1348,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             errors = true
         }
         if(errors) return
+        document.querySelector('#session-end').classList.add('ok')
 
         if (PiikkiOffline.isOffline()) {
             PiikkiOffline.enqueue(PiikkiOffline.makeSessionEndItem(id, null, people, comment))
@@ -1388,6 +1393,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             fetchProducts()
             closeSessionWindow()
         } else {
+            document.querySelector('#session-end').classList.remove('ok')
             PiikkiToast.show({ id: 'session-error', message: 'Hostauksen lopetus epäonnistui', variant: 'error', icon: 'error', duration: 5000 })
         }
     }
