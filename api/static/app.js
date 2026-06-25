@@ -1752,19 +1752,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         btn.classList.add('disabled')
         btn.textContent = 'Synkronoidaan...'
         const result = await PiikkiOffline.sync()
-        if (result.busy) {
-            // A sync (auto-triggered) is already running; it will finish and
-            // refresh state. Don't surface it as a failure.
-            btn.classList.remove('disabled')
-            btn.textContent = 'Synkronoi'
-            return
-        }
-        if (!result.ran) {
-            btn.textContent = 'Ei yhteyttä'
-            return
-        }
         btn.classList.remove('disabled')
         btn.textContent = 'Synkronoi'
+        if (result.busy) return
+        if (!result.ran) {
+            PiikkiToast.show({
+                id: 'sync-result',
+                message: 'Ei yhteyttä palvelimeen',
+                variant: 'error', icon: 'error', duration: 4000,
+            })
+            return
+        }
         if (result.failed > 0) {
             PiikkiToast.show({
                 id: 'sync-result',

@@ -488,7 +488,11 @@ const PiikkiOffline = (() => {
 
         const showSection = !connected || getQueueSize() > 0
         section.style.display = showSection ? '' : 'none'
-        if (!showSection) return
+        if (!showSection) {
+            const listEl = section.querySelector('.offline-queue-list')
+            if (listEl) listEl.innerHTML = ''
+            return
+        }
 
         const q = loadQueue()
         const updatedAt = getUpdatedAt()
@@ -499,6 +503,9 @@ const PiikkiOffline = (() => {
 
         if (lastUpdateEl) lastUpdateEl.textContent = `Viimeisin yhteys: ${humanizeTime(updatedAt)}`
         if (countEl) countEl.textContent = q.length > 0 ? `Jonossa: ${q.length}` : ''
+
+        const syncBtn = section.querySelector('#offline-sync')
+        if (syncBtn) syncBtn.style.display = q.length > 0 ? '' : 'none'
 
         if (listEl) {
             listEl.innerHTML = ''

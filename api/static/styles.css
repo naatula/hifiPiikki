@@ -1225,13 +1225,16 @@ input[type=radio]:checked + label {
     overflow: hidden;
 }
 
+.statistics-list-content {
+    overflow-y: auto;
+    flex: 1;
+    padding-right: .5rem;
+}
+
 .statistics-tabs {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: .5rem;
-    overflow-y: auto;
-    flex: 1;
-    padding-right: .5rem;
 }
 
 .statistics-tabs > h2 {
@@ -1473,11 +1476,9 @@ footer {
 
 .offline-queue-section {
     background-color: #2d1111;
-    border: 1px solid var(--red);
     border-radius: .75rem;
     padding: .75rem 1rem;
     margin-bottom: .75rem;
-    flex-shrink: 0;
 }
 
 .offline-queue-section h3 {
