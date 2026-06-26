@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // optional "Käteinen" (cash) checkout row and the "Oma summa" button.
     // custom_amount defaults on so an outage before the first config load keeps
     // the long-standing feature visible.
-    var appConfig = { cash_enabled: false, custom_amount_enabled: true, negative_balance_limit: null }
+    var appConfig = { cash_enabled: false, custom_amount_enabled: true, negative_balance_limit: null, shelly_configured: false }
 
     const tabsById = {}
     var enteredPin = ''
@@ -1373,6 +1373,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const item = PiikkiOffline.makeSessionStartItem(tabId, tabName)
             PiikkiOffline.enqueue(item)
             PiikkiOffline.setCache('session', { id: item.id, tab: tabId, tab_name: tabName, started_at: new Date().toISOString(), ended_at: null, total_host: 0, total_all: 0 })
+            if (appConfig.shelly_configured) PiikkiToast.show({ id: 'shelly-error', message: 'Ei yhteyttä katkaisijaan. Kytke virta päälle jatkojohdosta.', variant: 'error', icon: 'error', duration: 8000 })
             closeSessionWindow()
             updateActiveSession()
             return
@@ -1398,6 +1399,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             PiikkiOffline.enqueue(item)
             PiikkiOffline.setCache('session', { id: item.id, tab: tabId, tab_name: tabName, started_at: new Date().toISOString(), ended_at: null, total_host: 0, total_all: 0 })
             if (lapsed) trySilentReauth()   // re-auth, then drain the queue (no CSRF race)
+            if (appConfig.shelly_configured) PiikkiToast.show({ id: 'shelly-error', message: 'Ei yhteyttä katkaisijaan. Kytke virta päälle jatkojohdosta.', variant: 'error', icon: 'error', duration: 8000 })
             // Render the host from the cached buffered session, not a server
             // fetch — the replay hasn't landed yet, so the server would still
             // report "no active session" and clobber the indicator.
@@ -1444,6 +1446,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             PiikkiOffline.setCache('session', { id: null })
             peopleInput.value = ''
             commentInput.value = ''
+            if (appConfig.shelly_configured) PiikkiToast.show({ id: 'shelly-error', message: 'Ei yhteyttä katkaisijaan. Katkaise virta jatkojohdosta.', variant: 'error', icon: 'error', duration: 8000 })
             updateActiveSession()
             closeSessionWindow()
             return
@@ -1463,6 +1466,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             peopleInput.value = ''
             commentInput.value = ''
             if (lapsed) trySilentReauth()   // re-auth, then drain the queue (no CSRF race)
+            if (appConfig.shelly_configured) PiikkiToast.show({ id: 'shelly-error', message: 'Ei yhteyttä katkaisijaan. Katkaise virta jatkojohdosta.', variant: 'error', icon: 'error', duration: 8000 })
             // Render "no host" from cache, not a server fetch — the end replay
             // hasn't landed, so the server would still report the session active.
             renderActiveSession(PiikkiOffline.getCache('session'))

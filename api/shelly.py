@@ -147,3 +147,14 @@ def schedule_turn_off_shelly(delay_seconds: int = 60) -> Optional[bool]:
     except Exception as e:
         logger.error(f"Failed to schedule Shelly device turn off: {e}")
         return None
+
+
+def is_shelly_configured() -> bool:
+    """Return True if all three Shelly Cloud settings are present and non-empty."""
+    try:
+        return all(
+            Setting.objects.get(key=k).value
+            for k in ('shelly_cloud_server', 'shelly_cloud_key', 'shelly_cloud_device')
+        )
+    except Setting.DoesNotExist:
+        return False
