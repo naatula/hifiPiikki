@@ -133,7 +133,7 @@ class PurchaseViewSet(viewsets.GenericViewSet):
                     client_uuid=it['client_uuid'],
                     occurred_at=occurred_at,
                 ))
-            update_fields = {'balance': F('balance') - combined_total}
+            update_fields = {'balance': F('balance') - combined_total, 'last_purchase_at': timezone.now()}
             if tab.pin_required:
                 update_fields['pin_attempts'] = 0
             Tab.objects.filter(pk=tab.pk).update(**update_fields)

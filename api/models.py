@@ -75,6 +75,7 @@ class Tab(ParanoidModel):
     pin_required = models.BooleanField(default=False)
     pin_attempts = models.IntegerField(default=0)
     ignore_balance_limit = models.BooleanField(default=False)
+    last_purchase_at = models.DateTimeField(null=True, blank=True, default=None)
 
     def clean(self):
         super().clean()

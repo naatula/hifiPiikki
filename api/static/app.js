@@ -941,7 +941,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             document.querySelector('.checkout-panel .tab-list .tabs').appendChild(element)
             element.addEventListener('click', () => selectTab(element))
         })
-        tabs.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)).slice(0, 6).forEach((x) => {
+        tabs.sort((a, b) => new Date(b.last_purchase_at || b.updated_at) - new Date(a.last_purchase_at || a.updated_at)).slice(0, 6).forEach((x) => {
             const element = document.createElement('div')
             element.dataset.id = x.id
             element.textContent = x.name
