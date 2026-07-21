@@ -51,6 +51,7 @@ PRODUCT_INOUT = "E2E Sisu"
 PRODUCT_STOCK = "E2E Limu"
 GROUP = "E2E Juomat"
 INACTIVE_TAB = "E2E Suljettu"
+HOST_ONLY_TAB = "E2E Vain hostaus"
 PIN_LOCKOUT_THRESHOLD = 3
 
 
@@ -88,19 +89,23 @@ def baseline():
     )
     Tab.objects.get_or_create(
         name=NONPIN_TAB,
-        defaults={"balance": "0.00", "active": True, "pin_required": False},
+        defaults={"balance": "0.00", "status": Tab.STATUS_ENABLED, "pin_required": False},
     )
     Tab.objects.get_or_create(
         name=NONPIN_TAB2,
-        defaults={"balance": "0.00", "active": True, "pin_required": False},
+        defaults={"balance": "0.00", "status": Tab.STATUS_ENABLED, "pin_required": False},
     )
     Tab.objects.get_or_create(
         name=PIN_TAB,
-        defaults={"balance": "0.00", "active": True, "pin_required": True, "pin": PIN_CODE},
+        defaults={"balance": "0.00", "status": Tab.STATUS_ENABLED, "pin_required": True, "pin": PIN_CODE},
     )
     Tab.objects.get_or_create(
         name=INACTIVE_TAB,
-        defaults={"balance": "-5.00", "active": False},
+        defaults={"balance": "-5.00", "status": Tab.STATUS_DISABLED},
+    )
+    Tab.objects.get_or_create(
+        name=HOST_ONLY_TAB,
+        defaults={"balance": "0.00", "status": Tab.STATUS_HOST_ONLY},
     )
     Setting.objects.update_or_create(
         key="pin_lockout_threshold",
@@ -120,7 +125,10 @@ def reset():
         balance="0.00", pin_attempts=0, pin_required=True
     )
     Tab.objects.filter(name=INACTIVE_TAB).update(
-        balance="-5.00", active=False
+        balance="-5.00", status=Tab.STATUS_DISABLED
+    )
+    Tab.objects.filter(name=HOST_ONLY_TAB).update(
+        balance="0.00", status=Tab.STATUS_HOST_ONLY
     )
     Product.objects.filter(name=PRODUCT_STOCK).update(stock_quantity="10")
     # Restore config defaults so tests don't bleed.

@@ -93,4 +93,18 @@ test.describe('Host sessions (happy path)', () => {
     await expect(page.locator('#session-total-host')).toContainText('3')
     await expect(page.locator('#session-total-all')).toContainText('3')
   })
+
+  test('a host-only tab is not grayed out and can start a session', async ({ page }) => {
+    await h.login(page)
+    await page.locator('#session-info').click()
+    await expect(page.locator('.session-panel')).toHaveClass(/active/)
+    const hostOnlyRow = page.locator('#session-tab-list .tabs > div', { hasText: h.HOST_ONLY_TAB }).first()
+    await expect(hostOnlyRow).toBeVisible()
+    await expect(hostOnlyRow).not.toHaveClass(/host-only/)
+    await hostOnlyRow.click()
+    await expect(page.locator('#session-confirm')).not.toHaveClass(/disabled/)
+    await page.locator('#session-confirm').click()
+    await expect(page.locator('#session-info')).toHaveClass(/active/)
+    expect(h.countActiveSessions()).toBe(1)
+  })
 })

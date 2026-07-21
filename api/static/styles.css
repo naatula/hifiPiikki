@@ -620,6 +620,10 @@ h3 {
     background-color: var(--grey3);
 }
 
+.tabs > div.host-only, .tab-list .suggestions > div.host-only {
+    opacity: 0.5;
+}
+
 .products > div.selected, .quick-payment.selected {
     transition: background-color .2s, color .2s;
     background-color: var(--lightgrey);

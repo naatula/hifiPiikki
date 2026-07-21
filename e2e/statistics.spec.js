@@ -62,17 +62,23 @@ test.describe('Statistics', () => {
     await expect(page.locator('#statistics-tab-adjustment')).toContainText('Ei suorituksia')
   })
 
-  test('an inactive tab shows "Poistettu käytöstä" and the .inactive class', async ({ page }) => {
+  test('a disabled tab is shown nowhere in the statistics list', async ({ page }) => {
     await h.login(page)
     await page.locator('#statistics-button').click()
     await expect(page.locator('.statistics-panel')).toHaveClass(/active/)
-    // The inactive tab should still appear in the list (tabs/all includes inactive with balance).
-    const row = page.locator('.statistics-tabs > div', { hasText: h.INACTIVE_TAB })
+    await expect(page.locator('.statistics-tabs > div', { hasText: h.INACTIVE_TAB })).toHaveCount(0)
+  })
+
+  test('a host-only tab shows "Vain hostaus" and the .inactive class', async ({ page }) => {
+    await h.login(page)
+    await page.locator('#statistics-button').click()
+    await expect(page.locator('.statistics-panel')).toHaveClass(/active/)
+    const row = page.locator('.statistics-tabs > div', { hasText: h.HOST_ONLY_TAB })
     await expect(row).toBeVisible()
     await expect(row).toHaveClass(/inactive/)
     await row.click()
     await expect(page.locator('.statistics-detail-view')).toBeVisible()
-    await expect(page.locator('#statistics-tab-status')).toContainText('Poistettu käytöstä')
+    await expect(page.locator('#statistics-tab-status')).toContainText('Vain hostaus')
   })
 
   test('shows recent purchases and "Ei ostoksia" when empty', async ({ page }) => {
