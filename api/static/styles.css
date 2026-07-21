@@ -1640,6 +1640,7 @@ footer {
     box-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .45);
     font-size: .9375rem;
     line-height: 1.35;
+    overflow: hidden;
     animation: toastIn .32s cubic-bezier(.21, 1.02, .73, 1) both;
 }
 
@@ -1666,6 +1667,25 @@ footer {
 .toast--update  .toast__icon svg { fill: var(--yellow); }
 .toast--error   .toast__icon svg { fill: var(--red); }
 .toast--info    .toast__icon svg { fill: var(--lightgrey); }
+
+.toast__progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: .1875rem;
+    background: currentColor;
+    opacity: .55;
+    transform-origin: left;
+    animation-name: toastProgress;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+}
+
+.toast--success .toast__progress { color: var(--green); }
+.toast--update  .toast__progress { color: var(--yellow); }
+.toast--error   .toast__progress { color: var(--red); }
+.toast--info    .toast__progress { color: var(--lightgrey); }
 
 .toast__message {
     flex: 1;
@@ -1730,9 +1750,15 @@ footer {
     to   { opacity: 0; transform: translateY(.5rem) scale(.96); }
 }
 
+@keyframes toastProgress {
+    from { transform: scaleX(1); }
+    to   { transform: scaleX(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .toast { animation: fadeIn .2s both; }
     .toast--leaving { animation: fadeOut .2s forwards; }
+    .toast__progress { animation: none; opacity: 0; }
 }
 
 @media screen and (max-width: 759px) {

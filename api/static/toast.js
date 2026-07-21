@@ -111,6 +111,10 @@ const PiikkiToast = (() => {
         root.appendChild(el)
 
         if (duration > 0) {
+            const bar = document.createElement('div')
+            bar.className = 'toast__progress'
+            bar.style.animationDuration = `${duration}ms`
+            el.appendChild(bar)
             el._timer = setTimeout(() => dismiss(el), duration)
         }
 
