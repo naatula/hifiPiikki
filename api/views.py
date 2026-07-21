@@ -155,9 +155,9 @@ class TabViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        """Override queryset to exclude disabled tabs for list view only"""
+        """Override queryset to exclude disabled/archived tabs for list view only"""
         if self.action == 'list':
-            return Tab.objects.exclude(status=Tab.STATUS_DISABLED).order_by('name')
+            return Tab.objects.exclude(status__in=[Tab.STATUS_DISABLED, Tab.STATUS_ARCHIVED]).order_by('name')
         return Tab.objects.all().order_by('name')
 
     def retrieve(self, request, pk=None):
@@ -250,8 +250,8 @@ class TabViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['get'])
     def all(self, request):
-        """List all non-disabled tabs with their balances"""
-        queryset = Tab.objects.exclude(status=Tab.STATUS_DISABLED).order_by('name')
+        """List all non-disabled, non-archived tabs with their balances"""
+        queryset = Tab.objects.exclude(status__in=[Tab.STATUS_DISABLED, Tab.STATUS_ARCHIVED]).order_by('name')
         serializer = TabSerializer(queryset, many=True)
         return Response(serializer.data)
 

@@ -71,10 +71,12 @@ class Tab(ParanoidModel):
     STATUS_DISABLED = 'disabled'
     STATUS_HOST_ONLY = 'host_only'
     STATUS_ENABLED = 'enabled'
+    STATUS_ARCHIVED = 'archived'
     STATUS_CHOICES = [
         (STATUS_DISABLED, 'Disabled'),
         (STATUS_HOST_ONLY, 'Host only, no purchases'),
         (STATUS_ENABLED, 'Enabled'),
+        (STATUS_ARCHIVED, 'Archived'),
     ]
 
     name = models.CharField(max_length=255)
@@ -90,6 +92,8 @@ class Tab(ParanoidModel):
         super().clean()
         if self.pin_required and not self.pin:
             raise ValidationError({'pin_required': 'PIN must be set to enable PIN requirement.'})
+        if self.status == self.STATUS_ARCHIVED and self.balance != 0:
+            raise ValidationError({'status': 'Tab must have a balance of 0.00 to be archived.'})
 
     def __str__(self):
         return self.name

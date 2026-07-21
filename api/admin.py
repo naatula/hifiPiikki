@@ -20,12 +20,19 @@ class TabAdmin(MyModelAdmin):
     list_display = ('name', 'balance', 'status', 'ignore_balance_limit',)
     list_filter = ('status', 'pin_required',)
     ordering = ('name',)
-    actions = ['validate_tabs', 'recalculate_balances', 'activate_tabs', 'set_host_only_tabs', 'deactivate_tabs', 'reset_pin_attempts']
+    actions = ['validate_tabs', 'recalculate_balances', 'activate_tabs', 'set_host_only_tabs', 'deactivate_tabs', 'archive_tabs', 'reset_pin_attempts']
     change_list_template = 'admin/api/tab/change_list.html'
     fields = ('name', 'balance', 'status', 'pin', 'pin_required', 'pin_attempts', 'ignore_balance_limit',)
 
     def get_readonly_fields(self, request, obj=None):
         return super().get_readonly_fields(request, obj) + ('balance', 'pin_attempts',)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # Archived tabs are hidden from the default list; filter by Status = Archived to see them.
+        if request.GET.get('status__exact') == Tab.STATUS_ARCHIVED:
+            return qs
+        return qs.exclude(status=Tab.STATUS_ARCHIVED)
 
     def get_urls(self):
         urls = super().get_urls()
@@ -96,6 +103,18 @@ class TabAdmin(MyModelAdmin):
     def deactivate_tabs(self, request, queryset):
         updated = queryset.update(status=Tab.STATUS_DISABLED)
         messages.success(request, f'Successfully deactivated {updated} tab(s).')
+
+    @admin.action(description='Archive selected tabs (balance must be 0.00)')
+    def archive_tabs(self, request, queryset):
+        blocked = list(queryset.exclude(balance=Decimal('0.00')).values_list('name', flat=True))
+        updated = queryset.filter(balance=Decimal('0.00')).update(status=Tab.STATUS_ARCHIVED)
+        if updated:
+            messages.success(request, f'Archived {updated} tab(s).')
+        if blocked:
+            messages.error(
+                request,
+                f"Could not archive {len(blocked)} tab(s) with a non-zero balance: {', '.join(blocked)}"
+            )
 
     @admin.action(description='Reset PIN attempts (unlock)')
     def reset_pin_attempts(self, request, queryset):
@@ -485,6 +504,11 @@ class TabAdjustmentAdmin(MyModelAdmin):
         elif obj is not None and 'activate_tab' in fields:
             fields.remove('activate_tab')
         return fields
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'tab':
+            kwargs['queryset'] = Tab.objects.exclude(status=Tab.STATUS_ARCHIVED)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
