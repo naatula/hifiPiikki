@@ -938,7 +938,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (x.status === 'host_only') {
                 element.classList.add('host-only')
                 element.addEventListener('click', () => {
-                    PiikkiToast.show({ id: 'host-only-tab', message: `${x.name}: piikki on vain hostausta varten, ostoksia ei voi tehdä`, variant: 'error', icon: 'error', duration: 4000 })
+                    PiikkiToast.show({ id: 'host-only-tab', message: `${x.name}: ostokset pois päältä`, variant: 'error', icon: 'error', duration: 4000 })
                 })
                 return
             }
