@@ -68,9 +68,18 @@ def is_tab_locked(tab, threshold=None):
 
 # Create your models here.
 class Tab(ParanoidModel):
+    STATUS_DISABLED = 'disabled'
+    STATUS_HOST_ONLY = 'host_only'
+    STATUS_ENABLED = 'enabled'
+    STATUS_CHOICES = [
+        (STATUS_DISABLED, 'Disabled'),
+        (STATUS_HOST_ONLY, 'Host only, no purchases'),
+        (STATUS_ENABLED, 'Enabled'),
+    ]
+
     name = models.CharField(max_length=255)
     balance = models.DecimalField(max_digits=10, decimal_places=2, default=0.0)
-    active = models.BooleanField(default=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_ENABLED)
     pin = models.CharField(max_length=6, blank=True, null=True, validators=[RegexValidator(r'^\d{6}$', 'PIN must be exactly 6 digits')])
     pin_required = models.BooleanField(default=False)
     pin_attempts = models.IntegerField(default=0)

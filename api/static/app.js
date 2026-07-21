@@ -934,19 +934,30 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelector('.checkout-panel .tab-list .tabs').innerHTML = ''
         document.querySelector('.checkout-panel .tab-list .suggestions').innerHTML = ''
 
+        const bindTabClick = (element, x) => {
+            if (x.status === 'host_only') {
+                element.classList.add('host-only')
+                element.addEventListener('click', () => {
+                    PiikkiToast.show({ id: 'host-only-tab', message: `${x.name}: piikki on vain hostausta varten, ostoksia ei voi tehdä`, variant: 'error', icon: 'error', duration: 4000 })
+                })
+                return
+            }
+            element.addEventListener('click', () => selectTab(element))
+        }
+
         tabs.forEach((x) => {
             const element = document.createElement('div')
             element.dataset.id = x.id
             element.textContent = x.name
             document.querySelector('.checkout-panel .tab-list .tabs').appendChild(element)
-            element.addEventListener('click', () => selectTab(element))
+            bindTabClick(element, x)
         })
         tabs.sort((a, b) => new Date(b.last_purchase_at || b.updated_at) - new Date(a.last_purchase_at || a.updated_at)).slice(0, 6).forEach((x) => {
             const element = document.createElement('div')
             element.dataset.id = x.id
             element.textContent = x.name
             document.querySelector('.checkout-panel .tab-list .suggestions').appendChild(element)
-            element.addEventListener('click', () => selectTab(element))
+            bindTabClick(element, x)
         })
         alphabet.split('').forEach((x) => {
             const element = document.createElement('div')
@@ -965,6 +976,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         })
         document.querySelector('#session-tab-list').innerHTML = document.querySelector('.checkout-panel .tab-list').innerHTML
         document.querySelectorAll('#session-tab-list .pin-disabled').forEach(el => el.classList.remove('pin-disabled'))
+        // Host-only tabs can't purchase but can still host a session, so they
+        // must not be grayed out or blocked in the session tab picker.
+        document.querySelectorAll('#session-tab-list .host-only').forEach(el => el.classList.remove('host-only'))
         document.querySelectorAll('#session-tab-list .suggestions > div, #session-tab-list .tabs > div').forEach((x) => {
             x.addEventListener('click', () => selectSessionTab(x))
         })
@@ -1537,7 +1551,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         tabs.forEach((tab) => {
             const element = document.createElement('div')
             element.dataset.id = tab.id
-            if(!tab.active) element.classList.add('inactive')
+            if(tab.status === 'host_only') element.classList.add('inactive')
 
             const balanceClass = tab.balance > 0 ? 'positive' : (tab.balance < 0 ? 'negative' : '')
             const nameSpan = document.createElement('span')
@@ -1572,9 +1586,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         const tab = await response.json()
 
         document.querySelector('#statistics-tab-name').textContent = tab.name
-        document.querySelector('#statistics-tab-status').innerHTML = tab.active
-        ? '<span class="active-status">Käytössä</span>'
-        : '<span class="inactive-status">Poistettu käytöstä</span>'
+        const statusLabels = {
+            enabled: '<span class="active-status">Käytössä</span>',
+            host_only: '<span class="inactive-status">Vain hostaus, ei ostoksia</span>',
+            disabled: '<span class="inactive-status">Poistettu käytöstä</span>',
+        }
+        document.querySelector('#statistics-tab-status').innerHTML = statusLabels[tab.status] || ''
         document.querySelector('#statistics-tab-balance').innerHTML = currency(tab.balance)
 
         // Update tab adjustment info

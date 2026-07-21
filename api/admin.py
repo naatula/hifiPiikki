@@ -17,12 +17,12 @@ class MyModelAdmin(ParanoidAdmin):
     pass
 
 class TabAdmin(MyModelAdmin):
-    list_display = ('name', 'balance', 'active', 'ignore_balance_limit',)
-    list_filter = ('active', 'pin_required',)
+    list_display = ('name', 'balance', 'status', 'ignore_balance_limit',)
+    list_filter = ('status', 'pin_required',)
     ordering = ('name',)
-    actions = ['validate_tabs', 'recalculate_balances', 'activate_tabs', 'deactivate_tabs', 'reset_pin_attempts']
+    actions = ['validate_tabs', 'recalculate_balances', 'activate_tabs', 'set_host_only_tabs', 'deactivate_tabs', 'reset_pin_attempts']
     change_list_template = 'admin/api/tab/change_list.html'
-    fields = ('name', 'balance', 'active', 'pin', 'pin_required', 'pin_attempts', 'ignore_balance_limit',)
+    fields = ('name', 'balance', 'status', 'pin', 'pin_required', 'pin_attempts', 'ignore_balance_limit',)
 
     def get_readonly_fields(self, request, obj=None):
         return super().get_readonly_fields(request, obj) + ('balance', 'pin_attempts',)
@@ -84,12 +84,17 @@ class TabAdmin(MyModelAdmin):
 
     @admin.action(description='Activate selected tabs')
     def activate_tabs(self, request, queryset):
-        updated = queryset.update(active=True)
+        updated = queryset.update(status=Tab.STATUS_ENABLED)
         messages.success(request, f'Successfully activated {updated} tab(s).')
+
+    @admin.action(description='Set selected tabs to host only, no purchases')
+    def set_host_only_tabs(self, request, queryset):
+        updated = queryset.update(status=Tab.STATUS_HOST_ONLY)
+        messages.success(request, f'Set {updated} tab(s) to host only, no purchases.')
 
     @admin.action(description='Deactivate selected tabs')
     def deactivate_tabs(self, request, queryset):
-        updated = queryset.update(active=False)
+        updated = queryset.update(status=Tab.STATUS_DISABLED)
         messages.success(request, f'Successfully deactivated {updated} tab(s).')
 
     @admin.action(description='Reset PIN attempts (unlock)')
@@ -493,7 +498,7 @@ class TabAdjustmentAdmin(MyModelAdmin):
         tab_balances = {t.id: float(t.balance) for t in Tab.objects.all()}
         extra_context['tab_balances_json'] = json.dumps(tab_balances)
         if object_id is None:
-            inactive_tab_ids = list(Tab.objects.filter(active=False).values_list('id', flat=True))
+            inactive_tab_ids = list(Tab.objects.filter(status=Tab.STATUS_DISABLED).values_list('id', flat=True))
             extra_context['inactive_tab_ids_json'] = json.dumps(inactive_tab_ids)
             extra_context['existing_sum_json'] = 'null'
         else:
@@ -507,8 +512,8 @@ class TabAdjustmentAdmin(MyModelAdmin):
             if is_new:
                 super().save_model(request, obj, form, change)
                 Tab.objects.filter(pk=obj.tab_id).update(balance=F('balance') + obj.sum)
-                if form.cleaned_data.get('activate_tab') and not obj.tab.active:
-                    Tab.objects.filter(pk=obj.tab_id, active=False).update(active=True)
+                if form.cleaned_data.get('activate_tab') and obj.tab.status == Tab.STATUS_DISABLED:
+                    Tab.objects.filter(pk=obj.tab_id, status=Tab.STATUS_DISABLED).update(status=Tab.STATUS_ENABLED)
                     messages.info(request, f"Tab '{obj.tab.name}' has been activated.")
             else:
                 # Editing existing tab adjustment - adjust the difference

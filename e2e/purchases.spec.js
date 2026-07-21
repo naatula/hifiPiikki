@@ -69,4 +69,16 @@ test.describe('Purchases (happy path)', () => {
     expect(h.countPurchases()).toBe(1)
     expect(h.tabBalance(h.TAB)).toBe(-4.00) // 1 × 4.00 (out price)
   })
+
+  test('a host-only tab is listed grayed out and shows a popup instead of being selected', async ({ page }) => {
+    await h.login(page)
+    await h.startPurchase(page)
+    const hostOnlyRow = page.locator('.checkout-panel .tab-list .tabs > div', { hasText: h.HOST_ONLY_TAB }).first()
+    await expect(hostOnlyRow).toBeVisible()
+    await expect(hostOnlyRow).toHaveClass(/host-only/)
+    await hostOnlyRow.click()
+    await expect(page.locator('.toast', { hasText: 'vain hostausta varten' })).toBeVisible()
+    await expect(hostOnlyRow).not.toHaveClass(/selected/)
+    await expect(page.locator('#confirmation .button')).toHaveClass(/disabled/)
+  })
 })

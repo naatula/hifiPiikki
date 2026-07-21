@@ -15,7 +15,8 @@ const PRODUCT_STOCK = 'E2E Limu'    // stock-tracked product (stock_quantity=10)
 const TAB = 'E2E Testi'             // non-PIN tab
 const TAB2 = 'E2E Testi 2'         // second non-PIN tab (for multi-tab tests)
 const PIN_TAB = 'E2E PIN'           // PIN-protected tab
-const INACTIVE_TAB = 'E2E Suljettu' // inactive tab with balance
+const INACTIVE_TAB = 'E2E Suljettu' // disabled tab with balance
+const HOST_ONLY_TAB = 'E2E Vain hostaus' // host-only tab (can host, no purchases)
 const PIN_CODE = '123456'
 const PIN_LOCKOUT_THRESHOLD = 3
 
@@ -108,7 +109,7 @@ async function blockPopstate(context) {
 
 module.exports = {
   USER, PASSWORD, PRODUCT, PRODUCT_INOUT, PRODUCT_STOCK,
-  TAB, TAB2, PIN_TAB, INACTIVE_TAB, PIN_CODE, PIN_LOCKOUT_THRESHOLD,
+  TAB, TAB2, PIN_TAB, INACTIVE_TAB, HOST_ONLY_TAB, PIN_CODE, PIN_LOCKOUT_THRESHOLD,
   seed, countPurchases, countSessions, countActiveSessions, tabBalance, pinAttempts,
   productStock, setSetting, tabAdjust,
   queue, storedCreds, loginShown, expireSession,
