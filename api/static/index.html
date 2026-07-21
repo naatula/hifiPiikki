@@ -178,6 +178,10 @@
             </main>
         </div>
 </div>
+<div class="update-overlay" id="update-overlay">
+    <div class="update-spinner"></div>
+    <p>Päivitetään...</p>
+</div>
 <script>
 if ('serviceWorker' in navigator) {
     // Captured before registration: was a worker already controlling this page?
@@ -192,13 +196,16 @@ if ('serviceWorker' in navigator) {
             PiikkiToast.show({
                 id: 'sw-update',
                 variant: 'update',
-                message: 'Uusi versio saatavilla',
+                message: 'Päivitys valmiina',
                 duration: 0,
                 dismissible: false,
                 actions: [{
                     label: 'Päivitä',
                     primary: true,
-                    onClick: () => { (worker || reg.waiting)?.postMessage('SKIP_WAITING') },
+                    onClick: () => {
+                        document.getElementById('update-overlay').classList.add('active')
+                        ;(worker || reg.waiting)?.postMessage('SKIP_WAITING')
+                    },
                 }],
             })
         }

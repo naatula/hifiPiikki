@@ -962,6 +962,40 @@ input[type=radio]:checked + label {
     animation: fadeIn .2s;
 }
 
+/* Full-screen blur shown after "Päivitä" is clicked, covering the reload
+   gap while the new service worker takes over and the page reloads. */
+.update-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 250;
+    background: rgba(16,16,16,0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    animation: fadeIn .2s;
+}
+
+.update-overlay.active {
+    display: flex;
+}
+
+.update-spinner {
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 3px solid var(--grey3);
+    border-top-color: var(--lightgrey);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 .login-card {
     width: 100%;
     max-width: 22rem;
