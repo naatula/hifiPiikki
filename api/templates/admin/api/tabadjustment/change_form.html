@@ -7,6 +7,7 @@
     const tabBalances = {{ tab_balances_json|safe }};
     const existingSum = {{ existing_sum_json|safe }};
     const inactiveTabIds = {{ inactive_tab_ids_json|default:"[]"|safe }};
+    const hostOnlyTabIds = {{ host_only_tab_ids_json|default:"[]"|safe }};
 
     function updateActivateTabVisibility() {
         const tabSelect = document.getElementById('id_tab');
@@ -17,9 +18,17 @@
 
         const selectedId = parseInt(tabSelect.value, 10);
         const isInactive = inactiveTabIds.includes(selectedId);
-        activateTabRow.style.display = isInactive ? '' : 'none';
+        const isHostOnly = hostOnlyTabIds.includes(selectedId);
+        activateTabRow.style.display = (isInactive || isHostOnly) ? '' : 'none';
 
-        if (!isInactive) activateTabCheckbox.checked = false;
+        const helpText = document.getElementById('id_activate_tab_helptext');
+        if (helpText) {
+            helpText.textContent = isHostOnly
+                ? 'This tab has purchases disabled. Check to enable it when saving.'
+                : 'This tab is disabled. Check to enable it when saving.';
+        }
+
+        if (!isInactive && !isHostOnly) activateTabCheckbox.checked = false;
     }
 
     function updateBalancePreview() {

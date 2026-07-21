@@ -460,8 +460,8 @@ class SessionAdmin(MyModelAdmin):
 class TabAdjustmentAdminForm(forms.ModelForm):
     activate_tab = forms.BooleanField(
         required=False,
-        label='Activate tab',
-        help_text='This tab is inactive. Check to activate it when saving.',
+        label='Enable tab',
+        help_text='This tab is disabled. Check to enable it when saving.',
         initial=False,
     )
 
@@ -499,7 +499,9 @@ class TabAdjustmentAdmin(MyModelAdmin):
         extra_context['tab_balances_json'] = json.dumps(tab_balances)
         if object_id is None:
             inactive_tab_ids = list(Tab.objects.filter(status=Tab.STATUS_DISABLED).values_list('id', flat=True))
+            host_only_tab_ids = list(Tab.objects.filter(status=Tab.STATUS_HOST_ONLY).values_list('id', flat=True))
             extra_context['inactive_tab_ids_json'] = json.dumps(inactive_tab_ids)
+            extra_context['host_only_tab_ids_json'] = json.dumps(host_only_tab_ids)
             extra_context['existing_sum_json'] = 'null'
         else:
             obj = TabAdjustment.objects.get(pk=object_id)
@@ -512,9 +514,11 @@ class TabAdjustmentAdmin(MyModelAdmin):
             if is_new:
                 super().save_model(request, obj, form, change)
                 Tab.objects.filter(pk=obj.tab_id).update(balance=F('balance') + obj.sum)
-                if form.cleaned_data.get('activate_tab') and obj.tab.status == Tab.STATUS_DISABLED:
-                    Tab.objects.filter(pk=obj.tab_id, status=Tab.STATUS_DISABLED).update(status=Tab.STATUS_ENABLED)
-                    messages.info(request, f"Tab '{obj.tab.name}' has been activated.")
+                if form.cleaned_data.get('activate_tab') and obj.tab.status != Tab.STATUS_ENABLED:
+                    Tab.objects.filter(
+                        pk=obj.tab_id, status__in=[Tab.STATUS_DISABLED, Tab.STATUS_HOST_ONLY]
+                    ).update(status=Tab.STATUS_ENABLED)
+                    messages.info(request, f"Tab '{obj.tab.name}' has been enabled.")
             else:
                 # Editing existing tab adjustment - adjust the difference
                 old_obj = TabAdjustment.objects.get(pk=obj.pk)
