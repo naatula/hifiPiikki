@@ -138,7 +138,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         PiikkiToast.show({
             id: 'purchase-error',
             message: 'Saldo ylittyy — ostoa ei voitu tehdä',
-            variant: 'error', icon: 'error', duration: 4000, dismissible: true,
+            variant: 'error', icon: 'error', duration: 4000,,
         })
     }
 
@@ -301,7 +301,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             enteredPin = ''
             document.querySelectorAll('#pinpad .pin-dot').forEach(dot => dot.classList.remove('filled'))
             document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = false)
-            PiikkiToast.show({ id: 'pin-error', message: 'Yhteys palvelimeen epäonnistui', variant: 'error', icon: 'error', duration: 4000, dismissible: true })
+            PiikkiToast.show({ id: 'pin-error', message: 'Yhteys palvelimeen epäonnistui', variant: 'error', icon: 'error', duration: 4000, })
             return
         }
         if (response.status === 200) {
@@ -562,7 +562,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             enteredPin = ''
             document.querySelectorAll('#pinpad .pin-dot').forEach(dot => dot.classList.remove('filled'))
             document.querySelectorAll('#pinpad .pin-key').forEach(btn => btn.disabled = false)
-            PiikkiToast.show({ id: 'pin-error', message: 'Yhteys palvelimeen epäonnistui', variant: 'error', icon: 'error', duration: 4000, dismissible: true })
+            PiikkiToast.show({ id: 'pin-error', message: 'Yhteys palvelimeen epäonnistui', variant: 'error', icon: 'error', duration: 4000, })
             return
         }
         if (response.ok) {
@@ -1490,7 +1490,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if(response.ok) {
             const endData = await response.json()
             if (endData.shelly_ok === true) {
-                PiikkiToast.show({ id: 'shelly-success', message: 'Hostaus lopetettu. Automaattinen virrankatkaisu 60s kuluttua.', variant: 'success', icon: 'success', duration: 8000 })
+                PiikkiToast.show({ id: 'shelly-success', message: 'Hostaus lopetettu. Automaattinen virrankatkaisu 60s kuluttua.', variant: 'success', icon: 'success', duration: 60000, dismissible: false })
             } else if (endData.shelly_ok === false) {
                 PiikkiToast.show({ id: 'shelly-error', message: 'Ei yhteyttä katkaisijaan. Katkaise virta jatkojohdosta.', variant: 'error', icon: 'error', duration: 8000 })
             }
@@ -1732,7 +1732,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             statisticsEnteredPin = ''
             document.querySelectorAll('#statistics-pinpad .pin-dot').forEach(dot => dot.classList.remove('filled'))
             document.querySelectorAll('#statistics-pinpad .pin-key').forEach(btn => btn.disabled = false)
-            PiikkiToast.show({ id: 'pin-error', message: 'Yhteys palvelimeen epäonnistui', variant: 'error', icon: 'error', duration: 4000, dismissible: true })
+            PiikkiToast.show({ id: 'pin-error', message: 'Yhteys palvelimeen epäonnistui', variant: 'error', icon: 'error', duration: 4000, })
             return
         }
         if(response.status === 200) {
