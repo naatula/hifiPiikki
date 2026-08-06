@@ -138,7 +138,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         PiikkiToast.show({
             id: 'purchase-error',
             message: 'Saldo ylittyy — ostoa ei voitu tehdä',
-            variant: 'error', icon: 'error', duration: 4000,,
+            variant: 'error', icon: 'error', duration: 4000,
         })
     }
 
