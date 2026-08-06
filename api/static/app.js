@@ -1387,6 +1387,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const item = PiikkiOffline.makeSessionStartItem(tabId, tabName)
             PiikkiOffline.enqueue(item)
             PiikkiOffline.setCache('session', { id: item.id, tab: tabId, tab_name: tabName, started_at: new Date().toISOString(), ended_at: null, total_host: 0, total_all: 0 })
+            PiikkiToast.dismiss('shelly-success')
             if (appConfig.shelly_configured) PiikkiToast.show({ id: 'shelly-error', message: 'Ei yhteyttä katkaisijaan. Kytke virta päälle jatkojohdosta.', variant: 'error', icon: 'error', duration: 8000 })
             closeSessionWindow()
             updateActiveSession()
@@ -1413,6 +1414,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             PiikkiOffline.enqueue(item)
             PiikkiOffline.setCache('session', { id: item.id, tab: tabId, tab_name: tabName, started_at: new Date().toISOString(), ended_at: null, total_host: 0, total_all: 0 })
             if (lapsed) trySilentReauth()   // re-auth, then drain the queue (no CSRF race)
+            PiikkiToast.dismiss('shelly-success')
             if (appConfig.shelly_configured) PiikkiToast.show({ id: 'shelly-error', message: 'Ei yhteyttä katkaisijaan. Kytke virta päälle jatkojohdosta.', variant: 'error', icon: 'error', duration: 8000 })
             // Render the host from the cached buffered session, not a server
             // fetch — the replay hasn't landed yet, so the server would still
@@ -1428,6 +1430,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             return
         }
         const startData = await response.json()
+        PiikkiToast.dismiss('shelly-success')
         if (startData.shelly_ok === false) {
             PiikkiToast.show({ id: 'shelly-error', message: 'Ei yhteyttä katkaisijaan. Kytke virta päälle jatkojohdosta.', variant: 'error', icon: 'error', duration: 8000 })
         }
@@ -1490,7 +1493,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if(response.ok) {
             const endData = await response.json()
             if (endData.shelly_ok === true) {
-                PiikkiToast.show({ id: 'shelly-success', message: 'Hostaus lopetettu. Automaattinen virrankatkaisu 60s kuluttua.', variant: 'success', icon: 'success', duration: 60000, dismissible: false })
+                PiikkiToast.show({ id: 'shelly-success', message: 'Hostaus lopetettu. Automaattinen virrankatkaisu minuutin kuluttua ellei uutta hostausta aloiteta.', variant: 'success', icon: 'success', duration: 60000, dismissible: false })
             } else if (endData.shelly_ok === false) {
                 PiikkiToast.show({ id: 'shelly-error', message: 'Ei yhteyttä katkaisijaan. Katkaise virta jatkojohdosta.', variant: 'error', icon: 'error', duration: 8000 })
             }

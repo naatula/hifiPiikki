@@ -18,6 +18,7 @@
 //                   //   keeps the toast open, otherwise it is dismissed
 //   })
 //   handle.dismiss()
+//   PiikkiToast.dismiss(id)   // dismiss a currently-shown toast by its id, if any
 const PiikkiToast = (() => {
     let container = null
 
@@ -46,7 +47,14 @@ const PiikkiToast = (() => {
         if (el._timer) clearTimeout(el._timer)
         el.classList.add('toast--leaving')
         const done = () => el.remove()
-        el.addEventListener('animationend', done, { once: true })
+        // Only react to the toast's own leave animation — animationend bubbles,
+        // and the progress bar's fill animation can end at this same instant.
+        const onAnimEnd = (e) => {
+            if (e.target !== el) return
+            el.removeEventListener('animationend', onAnimEnd)
+            done()
+        }
+        el.addEventListener('animationend', onAnimEnd)
         // Fallback in case the animation never fires (e.g. reduced motion).
         setTimeout(done, 400)
     }
@@ -121,7 +129,13 @@ const PiikkiToast = (() => {
         return { el, dismiss: () => dismiss(el) }
     }
 
-    return { show, dismiss }
+    const dismissById = (id) => {
+        if (!container) return
+        const existing = container.querySelector(`[data-toast-id="${CSS.escape(id)}"]`)
+        if (existing) dismiss(existing)
+    }
+
+    return { show, dismiss: dismissById }
 })()
 
 if (typeof window !== 'undefined') window.PiikkiToast = PiikkiToast
