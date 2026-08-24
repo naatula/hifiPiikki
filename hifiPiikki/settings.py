@@ -22,13 +22,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-n+v57rh1!uhe@qpk65jm1b&7w@q768*q4^ae_u)s*ue(y3=^h@'
+SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = ["audiopoli.fi", "localhost", "127.0.0.1"]
 CSRF_TRUSTED_ORIGINS = ["https://audiopoli.fi"]
+
+# Cookie/proxy hardening. DEBUG is only true for local http dev, so the
+# Secure flag is tied to it; the app always runs behind a reverse proxy that
+# terminates TLS, so trust its forwarded-proto header for request.is_secure().
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Settings for running behind a reverse proxy
 USE_X_FORWARDED_HOST = True

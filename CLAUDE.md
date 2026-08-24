@@ -52,6 +52,7 @@ When any client asset changes (e.g. `app.js`, `offline.js`, `styles.css`, `index
 
 - `DEBUG` — Django debug mode (default `False`)
 - `FORCE_SCRIPT_NAME` — reverse proxy path prefix (default `/hifiPiikki`); set empty for local dev
+- `SECRET_KEY` — required, no default. Generate your own per environment (dev and prod each need their own) with `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`. Never commit a real value — `.env` is gitignored for this reason.
 
 ## Architecture notes
 
