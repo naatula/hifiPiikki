@@ -79,6 +79,10 @@ Kun Settings-avain `cash_enabled` on päällä, kassanäkymässä näkyy tuottei
 
 Shellyn pistorasian saa kytkemään virrat automaattisesti kytkeytymään päälle ja pois täyttämällä Settings-avaimet `shelly_cloud_server`, `shelly_cloud_key` ja `shelly_cloud_device`.
 
+## Kinopoli
+
+Kinopoli pitää tilan virran päällä hostauksen ajan. hifiPiikki ilmoittaa jokaisesta hostauksen alkamisesta ja päättymisestä Kinopolille (`api/kinopoli.py`); Kinopoli ei kysele. Hostauksen päätyttyä virta pysyy päällä vielä minuutin, kuten hifiPiikin oma Shelly. Asetukset `.env`-tiedostossa: `KINOPOLI_PUSH_URL`, `KINOPOLI_TOKEN` (sama arvo kuin Kinopolin `HIFIPIIKKI_TOKEN`) ja `EXTRA_ALLOWED_HOSTS`. Tyhjänä integraatio on pois päältä.
+
 ## PIN-koodit
 
 Yksittäisen piikin (Tab) voi suojata 6-numeroisella PIN-koodilla. Ylläpitäjä asettaa hallintanäkymästä piikille kentät `pin` (6 numeroa) ja `pin_required`. Kun `pin_required` on päällä, käyttäjänäkymä näyttää oston vahvistuspainikkeen painamisen jälkeen numeronäppäimistön: oikean PIN-koodin syöttäminen kirjaa oston (äänellä ja kuittauksella kuten painikkeella), väärä koodi tyhjentää syötteen.

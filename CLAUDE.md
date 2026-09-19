@@ -53,6 +53,8 @@ When any client asset changes (e.g. `app.js`, `offline.js`, `styles.css`, `index
 - `DEBUG` — Django debug mode (default `False`)
 - `FORCE_SCRIPT_NAME` — reverse proxy path prefix (default `/hifiPiikki`); set empty for local dev
 - `SECRET_KEY` — required, no default. Generate your own per environment (dev and prod each need their own) with `python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"`. Never commit a real value — `.env` is gitignored for this reason.
+- `KINOPOLI_PUSH_URL`, `KINOPOLI_TOKEN` — Kinopoli integration (see below); both empty disables it
+- `EXTRA_ALLOWED_HOSTS` — comma-separated hosts added to `ALLOWED_HOSTS`; production sets `172.17.0.1` so the Kinopoli container can read the session state directly
 
 ## Architecture notes
 
@@ -80,3 +82,4 @@ Behavioural rules to preserve when touching this code:
 - **Failure handling**: transient errors (network drop, 5xx) keep an item `pending` for automatic retry on the next reconnect/ping; permanent 4xx rejections become `failed` (shown with a reason, individually dismissable) and are retried only on reconnect or manual sync — not hammered by the periodic ping.
 - **Offline restrictions**: PIN-protected tabs are non-selectable (PIN is server-only) and tab detail views are unreachable (the statistics list view shows locally-tracked balances from `tabsById`). The purchase confirmation sound plays when an action is *queued*, not on later sync.
 - Connectivity is verified by an actual server probe (`GET /api/csrf/`), not just `navigator.onLine`/the `online` event, which only reflect link state.
+- **Kinopoli integration** (`api/kinopoli.py`, `api/signals.py`): Kinopoli keeps the venue power on while somebody is hosting. Every saved `Session` change pushes the *whole* current state (active session, or the last ended one with `power_off_at = ended_at + 60 s`, matching this app's own relay turn-off) to `KINOPOLI_PUSH_URL` with a bearer token, from a background thread with retries — never blocking the request. Kinopoli also reads the same state once at its own startup from `GET /api/integration/session-state` (bearer token, no session auth; 404 while unconfigured). In production both apps share a host: the push goes to Kinopoli's loopback-only port `127.0.0.1:8082`, and Kinopoli reads from `http://172.17.0.1:9000`. The Kinopoli relay is a different device from the one `shelly.py` switches.

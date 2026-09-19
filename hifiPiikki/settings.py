@@ -27,7 +27,9 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ["audiopoli.fi", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["audiopoli.fi", "localhost", "127.0.0.1"] + [
+    host.strip() for host in config('EXTRA_ALLOWED_HOSTS', default='').split(',') if host.strip()
+]
 CSRF_TRUSTED_ORIGINS = ["https://audiopoli.fi"]
 
 # Cookie/proxy hardening. DEBUG is only true for local http dev, so the
@@ -40,6 +42,11 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # Settings for running behind a reverse proxy
 USE_X_FORWARDED_HOST = True
 FORCE_SCRIPT_NAME = config('FORCE_SCRIPT_NAME', default='/hifiPiikki')
+
+# Kinopoli integration (api/kinopoli.py). Both unset means nothing is pushed
+# and the session-state endpoint answers 404.
+KINOPOLI_PUSH_URL = config('KINOPOLI_PUSH_URL', default='')
+KINOPOLI_TOKEN = config('KINOPOLI_TOKEN', default='')
 
 
 # Application definition

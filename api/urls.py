@@ -17,4 +17,5 @@ urlpatterns = [
     path('auth/', include('rest_framework.urls', namespace='rest_framework')),
     path('csrf/', views.csrf),
     path('config/', views.config),
+    path('integration/session-state', views.integration_session_state),
 ]

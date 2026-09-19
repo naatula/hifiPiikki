@@ -2,7 +2,7 @@ from decimal import Decimal, InvalidOperation
 from django.db import IntegrityError, models, transaction
 from django.db.models import Case, F, Value, When
 from django.db.models.functions import ExtractHour
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
 from rest_framework import permissions, viewsets, serializers
@@ -16,6 +16,7 @@ from django.utils.dateparse import parse_datetime
 from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked, get_cash_enabled, get_custom_amount_enabled, get_negative_balance_limit
 from .serializers import PurchaseSerializer, TabSerializer, ProductSerializer, ProductGroupSerializer, SessionSerializer
 from .shelly import turn_on_shelly, schedule_turn_off_shelly, is_shelly_configured
+from . import kinopoli
 
 
 # Window within which a session event time counts as a live action (relay
@@ -440,3 +441,17 @@ def config(request):
         'negative_balance_limit': str(limit) if limit is not None else None,
         'shelly_configured': is_shelly_configured(),
     })
+
+
+def integration_session_state(request):
+    """The current hosting, for Kinopoli to read once when it starts.
+
+    Not a DRF view on purpose: it authenticates by the shared bearer token
+    alone (no session, no CSRF), and answers 404 while the integration is not
+    configured, so it is indistinguishable from a path that does not exist.
+    """
+    if request.method != 'GET' or not kinopoli.is_configured():
+        return JsonResponse({'detail': 'Not found'}, status=404)
+    if not kinopoli.token_matches(request.headers.get('Authorization')):
+        return JsonResponse({'detail': 'Unauthorized'}, status=401)
+    return JsonResponse(kinopoli.session_state())
