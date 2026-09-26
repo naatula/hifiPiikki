@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // optional "Käteinen" (cash) checkout row and the "Oma summa" button.
     // custom_amount defaults on so an outage before the first config load keeps
     // the long-standing feature visible.
-    var appConfig = { cash_enabled: false, custom_amount_enabled: true, negative_balance_limit: null, shelly_configured: false }
+    var appConfig = { cash_enabled: false, custom_amount_enabled: true, sessions_enabled: true, negative_balance_limit: null, shelly_configured: false }
 
     const tabsById = {}
     var enteredPin = ''
@@ -814,6 +814,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (button) button.style.display = appConfig.custom_amount_enabled ? '' : 'none'
         const nav = document.querySelector('.navigation')
         if (nav) nav.style.marginBottom = appConfig.custom_amount_enabled ? '' : '1rem'
+        const sessionButton = document.querySelector('#session-info')
+        if (sessionButton) sessionButton.style.display = appConfig.sessions_enabled ? '' : 'none'
     }
 
 

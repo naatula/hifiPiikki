@@ -343,7 +343,7 @@ class PurchaseAdmin(MyModelAdmin):
 
 class SettingsForm(forms.Form):
     KNOWN_KEYS = [
-        'cash_enabled', 'custom_amount_enabled', 'pin_lockout_threshold',
+        'cash_enabled', 'custom_amount_enabled', 'sessions_enabled', 'pin_lockout_threshold',
         'negative_balance_limit',
         'shelly_cloud_server', 'shelly_cloud_key', 'shelly_cloud_device',
     ]
@@ -358,6 +358,11 @@ class SettingsForm(forms.Form):
         required=False,
         label='Oma summa käytössä',
         help_text='Näyttää kassanäkymässä "Oma summa" -painikkeen vapaalle rahasummalle. Poista käytöstä piilottaaksesi sen.',
+    )
+    sessions_enabled = forms.BooleanField(
+        required=False,
+        label='Aktiivi-vuoro käytössä',
+        help_text='Näyttää keltaisen aktiivi-vuoro-painikkeen kassanäkymässä. Poista käytöstä piilottaaksesi sen.',
     )
     pin_lockout_threshold = forms.IntegerField(
         required=False,
@@ -413,6 +418,8 @@ class SettingAdmin(MyModelAdmin):
                 'cash_enabled': str(settings_dict.get('cash_enabled', '')).strip().lower() in SettingsForm.TRUTHY,
                 # Defaults to on when unset, mirroring get_custom_amount_enabled().
                 'custom_amount_enabled': str(settings_dict.get('custom_amount_enabled', 'true')).strip().lower() in SettingsForm.TRUTHY,
+                # Defaults to on when unset, mirroring get_sessions_enabled().
+                'sessions_enabled': str(settings_dict.get('sessions_enabled', 'true')).strip().lower() in SettingsForm.TRUTHY,
                 'pin_lockout_threshold': self._parse_optional_int(settings_dict.get('pin_lockout_threshold', '')),
                 'negative_balance_limit': self._parse_optional_decimal(settings_dict.get('negative_balance_limit', '')),
                 'shelly_cloud_server': settings_dict.get('shelly_cloud_server', ''),
@@ -433,6 +440,7 @@ class SettingAdmin(MyModelAdmin):
         mapping = {
             'cash_enabled': 'true' if cleaned_data['cash_enabled'] else 'false',
             'custom_amount_enabled': 'true' if cleaned_data['custom_amount_enabled'] else 'false',
+            'sessions_enabled': 'true' if cleaned_data['sessions_enabled'] else 'false',
             'pin_lockout_threshold': str(cleaned_data['pin_lockout_threshold']) if cleaned_data['pin_lockout_threshold'] is not None else '',
             'negative_balance_limit': str(cleaned_data['negative_balance_limit']) if cleaned_data['negative_balance_limit'] is not None else '',
             'shelly_cloud_server': cleaned_data.get('shelly_cloud_server') or '',

@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from django.utils.dateparse import parse_datetime
 
-from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked, get_cash_enabled, get_custom_amount_enabled, get_negative_balance_limit
+from .models import Purchase, Tab, Product, ProductGroup, Session, get_pin_lockout_threshold, is_tab_locked, get_cash_enabled, get_custom_amount_enabled, get_negative_balance_limit, get_sessions_enabled
 from .serializers import PurchaseSerializer, TabSerializer, ProductSerializer, ProductGroupSerializer, SessionSerializer
 from .shelly import turn_on_shelly, schedule_turn_off_shelly, is_shelly_configured
 from . import kinopoli
@@ -438,6 +438,7 @@ def config(request):
     return Response({
         'cash_enabled': get_cash_enabled(),
         'custom_amount_enabled': get_custom_amount_enabled(),
+        'sessions_enabled': get_sessions_enabled(),
         'negative_balance_limit': str(limit) if limit is not None else None,
         'shelly_configured': is_shelly_configured(),
     })

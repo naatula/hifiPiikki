@@ -40,6 +40,17 @@ def get_custom_amount_enabled():
     return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def get_sessions_enabled():
+    """Return True if the hosting-session feature (yellow session button) is enabled.
+
+    Defaults to True when unset so existing installs keep the long-standing
+    feature; only an explicit falsey Setting disables it."""
+    setting = Setting.objects.filter(key='sessions_enabled').first()
+    if setting is None or setting.value is None:
+        return True
+    return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 def get_negative_balance_limit():
     """Return the minimum allowed balance as a Decimal, or None if
     unset/empty (which means no limit).  Accepts any number: negative
