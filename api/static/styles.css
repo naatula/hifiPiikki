@@ -587,7 +587,8 @@ h3 {
 
 /* "Yksinkertaiset nimilistat": only the plain alphabetical list, no letter
    index, suggestions, headings or full-height top spacer. */
-.simple-tab-lists .tab-list .alphabet-container {
+.simple-tab-lists .tab-list .alphabet-container,
+.simple-tab-lists .tab-list > h3 {
     display: none;
 }
 
