@@ -53,6 +53,15 @@
       {% if form.sessions_enabled.help_text %}<div class="help">{{ form.sessions_enabled.help_text }}</div>{% endif %}
     </div>
 
+    <div class="form-row{% if form.simple_tab_lists.errors %} errors{% endif %}">
+      {{ form.simple_tab_lists.errors }}
+      <div>
+        {{ form.simple_tab_lists }}
+        <label for="{{ form.simple_tab_lists.id_for_label }}" class="vCheckboxLabel">{{ form.simple_tab_lists.label }}</label>
+      </div>
+      {% if form.simple_tab_lists.help_text %}<div class="help">{{ form.simple_tab_lists.help_text }}</div>{% endif %}
+    </div>
+
     <div class="form-row{% if form.pin_lockout_threshold.errors %} errors{% endif %}">
       {{ form.pin_lockout_threshold.errors }}
       <div>

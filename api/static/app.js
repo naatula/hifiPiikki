@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // optional "Käteinen" (cash) checkout row and the "Oma summa" button.
     // custom_amount defaults on so an outage before the first config load keeps
     // the long-standing feature visible.
-    var appConfig = { cash_enabled: false, custom_amount_enabled: true, sessions_enabled: true, negative_balance_limit: null, shelly_configured: false }
+    var appConfig = { cash_enabled: false, custom_amount_enabled: true, sessions_enabled: true, simple_tab_lists: false, negative_balance_limit: null, shelly_configured: false }
 
     const tabsById = {}
     var enteredPin = ''
@@ -816,6 +816,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (nav) nav.style.marginBottom = appConfig.custom_amount_enabled ? '' : '1rem'
         const sessionButton = document.querySelector('#session-info')
         if (sessionButton) sessionButton.style.display = appConfig.sessions_enabled ? '' : 'none'
+        // Plain alphabetical tab pickers: CSS hides the letter index and
+        // "Viimeisimmät" suggestions (both checkout and session lists).
+        document.body.classList.toggle('simple-tab-lists', !!appConfig.simple_tab_lists)
     }
 
 
@@ -947,7 +950,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             element.addEventListener('click', () => selectTab(element))
         }
 
-        tabs.forEach((x) => {
+        const allTabs = appConfig.simple_tab_lists
+            ? [...tabs].sort((a, b) => a.name.localeCompare(b.name, 'fi'))
+            : tabs
+        allTabs.forEach((x) => {
             const element = document.createElement('div')
             element.dataset.id = x.id
             element.textContent = x.name
