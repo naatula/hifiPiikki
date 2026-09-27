@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // optional "Käteinen" (cash) checkout row and the "Oma summa" button.
     // custom_amount defaults on so an outage before the first config load keeps
     // the long-standing feature visible.
-    var appConfig = { cash_enabled: false, custom_amount_enabled: true, sessions_enabled: true, simple_tab_lists: false, negative_balance_limit: null, shelly_configured: false }
+    var appConfig = { cash_enabled: false, custom_amount_enabled: true, custom_amount_only_enabled: false, sessions_enabled: true, simple_tab_lists: false, negative_balance_limit: null, shelly_configured: false }
 
     const tabsById = {}
     var enteredPin = ''
@@ -814,15 +814,64 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (button) button.style.display = appConfig.custom_amount_enabled ? '' : 'none'
         const nav = document.querySelector('.navigation')
         if (nav) nav.style.marginBottom = appConfig.custom_amount_enabled ? '' : '1rem'
-        const sessionButton = document.querySelector('#session-info')
-        if (sessionButton) sessionButton.style.display = appConfig.sessions_enabled ? '' : 'none'
+        document.querySelectorAll('.session-info-btn').forEach((el) => {
+            el.style.display = appConfig.sessions_enabled ? '' : 'none'
+        })
+        document.body.classList.toggle('custom-amount-only-mode', !!appConfig.custom_amount_only_enabled)
         // Plain alphabetical tab pickers: CSS hides the letter index and
         // "Viimeisimmät" suggestions (both checkout and session lists).
         document.body.classList.toggle('simple-tab-lists', !!appConfig.simple_tab_lists)
     }
 
 
+    // custom_amount_only_enabled: the client boots straight into (and always
+    // stays in) the "Oma summa" checkout — the product/category view is never
+    // shown, so there is no "main" to return to. First entry opens the
+    // checkout panel and builds the price input; every later call (after a
+    // successful purchase) just resets the selection and re-disables the sum
+    // input, per selectTab, until a name is picked again.
+    const CUSTOM_AMOUNT_ONLY_PRODUCT = { id: null, name: 'Oma summa' }
+
+    const enterCustomAmountOnlyMode = async () => {
+        const firstEntry = checkoutProduct === null
+        checkoutProduct = CUSTOM_AMOUNT_ONLY_PRODUCT
+        multiTabMode = false
+        clearMultiTabState()
+        const toggleBtn = document.querySelector('#multi-tab-toggle')
+        if (toggleBtn) toggleBtn.classList.remove('active')
+        document.querySelectorAll(
+            '.checkout-panel .tab-list .tabs > div.selected, ' +
+            '.checkout-panel .tab-list .suggestions > div.selected'
+        ).forEach((x) => x.classList.remove('selected'))
+        checkoutTab = null
+
+        if (firstEntry) {
+            document.querySelector('#checkout-title').textContent = CUSTOM_AMOUNT_ONLY_PRODUCT.name
+            document.querySelector('#checkout-description').style = 'display: none'
+            const options = document.querySelector('.checkout-column .options')
+            options.innerHTML = `<div id="checkout-price"><h2>Summa</h2><input type="text" id="custom-price" placeholder="0,00" step="0.01"><span style="font-size: 1.5rem">€</span></div>`
+            document.querySelector('input#custom-price').addEventListener('input', updateConfirmation)
+            await fetchTabs()
+            document.querySelector('.checkout-panel').classList.add('active')
+        } else {
+            const priceInput = document.querySelector('#custom-price')
+            if (priceInput) { priceInput.value = ''; priceInput.disabled = true }
+        }
+
+        updateConfirmation()
+        document.querySelector('#confirmation').classList.remove('ok')
+        document.querySelector('#confirmation').classList.remove('pin-mode')
+        enteredPin = ''
+        document.querySelector('.checkout-panel .tab-list').scroll(0, 0)
+        busy = false
+        PiikkiBack.sync()
+    }
+
     const toMain = () => {
+        if (appConfig.custom_amount_only_enabled) {
+            enterCustomAmountOnlyMode()
+            return
+        }
         fetchProducts()
         document.querySelector('.main-panel').classList.add('active')
         document.querySelector('.checkout-panel').classList.remove('active')
@@ -871,6 +920,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (PiikkiOffline.isOffline() && tabObj.pin_required) {
             PiikkiToast.show({ id: 'pin-offline', message: 'PIN-suojatut piikit eivät ole käytettävissä offline-tilassa', variant: 'error', icon: 'error', duration: 4000 })
             return
+        }
+
+        // custom_amount_only_enabled disables the sum input after each purchase
+        // (see enterCustomAmountOnlyMode); picking a name re-enables it for the
+        // next entry.
+        if (appConfig.custom_amount_only_enabled) {
+            const priceInput = document.querySelector('#custom-price')
+            if (priceInput && priceInput.disabled) priceInput.disabled = false
         }
 
         if (!multiTabMode) {
@@ -1072,6 +1129,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const fetchProducts = async (allowReauth = true) => {
+        // Not needed in custom_amount_only_enabled mode: the product/category
+        // view is never shown there.
+        if (appConfig.custom_amount_only_enabled) return true
         const { offline, response } = await PiikkiOffline.apiFetch('../api/products/')
         if (offline) {
             const cached = PiikkiOffline.getCache('products')
@@ -1178,13 +1238,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Success is confirmed by an authenticated probe, never by the login
         // POST's own status: a correct login 302-redirects, while a wrong one
         // re-renders the browsable-API form with 200 — so the status is useless.
-        const { offline, response: probe } = await PiikkiOffline.apiFetch('../api/products/')
+        // /api/config/ is used (rather than /api/products/) so a successful
+        // login never has to fetch products when custom_amount_only_enabled
+        // means they won't be shown.
+        const { offline, response: probe } = await PiikkiOffline.apiFetch('../api/config/')
         if (offline || !probe) return { ok: false, reason: 'network' }
         if (!probe.ok) return { ok: false, reason: isAuthFailure(probe) ? 'credentials' : 'network' }
 
-        const products = await probe.json()
-        PiikkiOffline.setCache('products', products)
-        return { ok: true, products }
+        const config = await probe.json()
+        PiikkiOffline.setCache('config', config)
+        return { ok: true, config }
     }
 
     // Coalesced silent re-auth: when stored credentials exist, transparently
@@ -1303,7 +1366,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (remember) PiikkiOffline.setCredentials(username, password)
         else PiikkiOffline.clearCredentials()
 
-        renderProducts(result.products)
+        appConfig = result.config
+        applyAppConfig()
+        if (!appConfig.custom_amount_only_enabled) fetchProducts()
         PiikkiOffline.setLoggedIn(true)
         document.querySelector('.login-panel').classList.remove('active')
         document.querySelector('#password').value = ''
@@ -1313,21 +1378,24 @@ document.addEventListener("DOMContentLoaded", async () => {
         PiikkiOffline.sync({ retryFailed: true })
         updateActiveSession()
         fetchTabs()
-        fetchConfig()
         toMain()
     }
 
     const renderActiveSession = (session) => {
-        const container = document.querySelector('#session-info')
+        const containers = document.querySelectorAll('.session-info-btn')
         if(session && session.id !== null) {
-            container.textContent = session.tab_name
-            container.classList.add('active')
-            container.classList.remove('none')
+            containers.forEach((container) => {
+                container.textContent = session.tab_name
+                container.classList.add('active')
+                container.classList.remove('none')
+            })
             activeHost = session
         } else {
-            container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z"/></svg>`
-            container.classList.add('none')
-            container.classList.remove('active')
+            containers.forEach((container) => {
+                container.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#e3e3e3"><path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z"/></svg>`
+                container.classList.add('none')
+                container.classList.remove('active')
+            })
             activeHost = null
         }
     }
@@ -1524,10 +1592,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         if(e.target !== e.currentTarget) return
         closeSessionWindow()
     }))
-    document.querySelector('#session-info').addEventListener('click', (e) => {
+    document.querySelectorAll('.session-info-btn').forEach((el) => el.addEventListener('click', (e) => {
         e.preventDefault()
         openSessionWindow()
-    })
+    }))
 
     // Statistics panel functions
     const openStatisticsWindow = async (allowReauth = true) => {
@@ -1786,9 +1854,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelector('.statistics-detail-view').style = 'display: none;'
     }
 
-    document.querySelector('#statistics-button').addEventListener('click', () => {
+    document.querySelectorAll('#statistics-button, #statistics-button-custom').forEach((el) => el.addEventListener('click', () => {
         openStatisticsWindow()
-    })
+    }))
     document.querySelectorAll('.statistics-panel .close, .statistics-panel').forEach((x) => x.addEventListener('click', (e) => {
         if(e.target !== e.currentTarget) return
         closeStatisticsWindow()
@@ -1950,13 +2018,15 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (PiikkiOffline.wasLoggedIn()) {
             const cachedTabs = PiikkiOffline.getCache('tabs')
             const cachedProducts = PiikkiOffline.getCache('products')
-            if (cachedTabs && cachedProducts) {
+            const cachedConfig = PiikkiOffline.getCache('config')
+            if (cachedConfig) appConfig = cachedConfig
+            // Products are never fetched/cached in custom_amount_only_enabled
+            // mode, so they're not required to boot offline there.
+            if (cachedTabs && (cachedProducts || appConfig.custom_amount_only_enabled)) {
                 PiikkiOffline.goOffline()
-                const cachedConfig = PiikkiOffline.getCache('config')
-                if (cachedConfig) appConfig = cachedConfig
                 applyAppConfig()
                 renderTabs(cachedTabs)
-                renderProducts(cachedProducts)
+                if (!appConfig.custom_amount_only_enabled) renderProducts(cachedProducts)
                 renderActiveSession(PiikkiOffline.getCache('session'))
                 toMain()
             } else {

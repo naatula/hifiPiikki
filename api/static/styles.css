@@ -181,6 +181,28 @@ body {
     overflow: hidden;
 }
 
+.custom-only-header-buttons {
+    display: none;
+}
+
+.custom-only-header-buttons.button-group {
+    width: auto;
+    margin: 0;
+}
+
+body.custom-amount-only-mode .main-panel {
+    display: none;
+}
+
+body.custom-amount-only-mode .checkout-panel > .top-bar > .back,
+body.custom-amount-only-mode .checkout-panel > .top-bar > h1 {
+    display: none;
+}
+
+body.custom-amount-only-mode .custom-only-header-buttons {
+    display: flex;
+}
+
 .checkout-column {
     display: flex;
     flex-direction: column;
@@ -218,7 +240,7 @@ body {
     min-height: 100%;
 }
 
-#session-info {
+.session-info-btn {
     height: 3.5rem;
     border-radius: 1rem;
     flex-grow: 1;
@@ -233,18 +255,18 @@ body {
     overflow: hidden;
 }
 
-#session-info.none {
+.session-info-btn.none {
     display: flex;
     background-color: var(--yellow);
     color: black;
 }
 
-#session-info.active {
+.session-info-btn.active {
     padding: 1rem;
     background-color: var(--green);
 }
 
-#session-info svg {
+.session-info-btn svg {
     margin: auto;
     width: 2rem;
     height: 2rem;
