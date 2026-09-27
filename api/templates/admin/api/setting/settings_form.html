@@ -53,6 +53,15 @@
       {% if form.sessions_enabled.help_text %}<div class="help">{{ form.sessions_enabled.help_text }}</div>{% endif %}
     </div>
 
+    <div class="form-row{% if form.custom_amount_only_enabled.errors %} errors{% endif %}">
+      {{ form.custom_amount_only_enabled.errors }}
+      <div>
+        {{ form.custom_amount_only_enabled }}
+        <label for="{{ form.custom_amount_only_enabled.id_for_label }}" class="vCheckboxLabel">{{ form.custom_amount_only_enabled.label }}</label>
+      </div>
+      {% if form.custom_amount_only_enabled.help_text %}<div class="help">{{ form.custom_amount_only_enabled.help_text }}</div>{% endif %}
+    </div>
+
     <div class="form-row{% if form.pin_lockout_threshold.errors %} errors{% endif %}">
       {{ form.pin_lockout_threshold.errors }}
       <div>

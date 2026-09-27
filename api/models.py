@@ -40,6 +40,16 @@ def get_custom_amount_enabled():
     return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def get_custom_amount_only_enabled():
+    """Return True if the client should run in "Oma summa"-only mode: the
+    default product/category view is disabled and the client boots straight
+    into the custom-amount checkout. Defaults to False (opt-in)."""
+    setting = Setting.objects.filter(key='custom_amount_only_enabled').first()
+    if setting is None or setting.value is None:
+        return False
+    return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 def get_sessions_enabled():
     """Return True if the hosting-session feature (yellow session button) is enabled.
 
