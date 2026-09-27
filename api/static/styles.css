@@ -181,12 +181,13 @@ body {
     overflow: hidden;
 }
 
-.custom-only-header-buttons {
-    display: none;
-}
-
+/* Qualified with .button-group so it outranks the later `.button-group`
+   display: flex (and the mobile column/auto-width override) — otherwise the
+   buttons show in normal mode and the session button collapses to no width. */
 .custom-only-header-buttons.button-group {
-    width: auto;
+    display: none;
+    flex-direction: row;
+    width: 14rem;
     margin: 0;
 }
 
@@ -199,8 +200,13 @@ body.custom-amount-only-mode .checkout-panel > .top-bar > h1 {
     display: none;
 }
 
-body.custom-amount-only-mode .custom-only-header-buttons {
+body.custom-amount-only-mode .custom-only-header-buttons.button-group {
     display: flex;
+}
+
+/* The checkout is the only view in this mode: show it without sliding in. */
+body.custom-amount-only-mode #app > * {
+    transition: none;
 }
 
 .checkout-column {
@@ -1131,6 +1137,9 @@ input[type=radio]:checked + label {
     justify-content: center;
     align-items: center;
     animation: fadeIn .2s;
+    /* Above the checkout panel, which follows it in the DOM and is the active
+       view underneath in custom_amount_only_enabled mode. */
+    z-index: 50;
 }
 
 .session-window {
