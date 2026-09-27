@@ -361,8 +361,8 @@ class SettingsForm(forms.Form):
     )
     sessions_enabled = forms.BooleanField(
         required=False,
-        label='Aktiivi-vuoro käytössä',
-        help_text='Näyttää keltaisen aktiivi-vuoro-painikkeen kassanäkymässä. Poista käytöstä piilottaaksesi sen.',
+        label='Hostaus käytössä',
+        help_text='Näyttää keltaisen hostaus-painikkeen kassanäkymässä. Poista käytöstä piilottaaksesi sen.',
     )
     pin_lockout_threshold = forms.IntegerField(
         required=False,
