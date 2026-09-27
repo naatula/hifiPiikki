@@ -61,6 +61,15 @@ def get_sessions_enabled():
     return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def get_simple_tab_lists():
+    """Return True if tab pickers should be a plain alphabetical list (no
+    letter index or "Viimeisimmät" suggestions). Defaults to False."""
+    setting = Setting.objects.filter(key='simple_tab_lists').first()
+    if setting is None or setting.value is None:
+        return False
+    return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 def get_negative_balance_limit():
     """Return the minimum allowed balance as a Decimal, or None if
     unset/empty (which means no limit).  Accepts any number: negative

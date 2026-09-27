@@ -579,6 +579,13 @@ h3 {
     min-height: min(80vh, 35rem); /* 100% breaks MobileSafari  */
 }
 
+/* "Yksinkertaiset nimilistat": only the plain alphabetical list, no letter
+   index, suggestions, headings or full-height top spacer. */
+.simple-tab-lists .tab-list .alphabet-container,
+.simple-tab-lists .tab-list > h3 {
+    display: none;
+}
+
 .alphabet {
     display: grid;
     gap: .5rem;
