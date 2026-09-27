@@ -14,6 +14,7 @@ test.describe('Simple tab lists', () => {
     await h.startPurchase(page)
     await expect(page.locator('.checkout-panel .tab-list .alphabet')).toBeVisible()
     await expect(page.locator('.checkout-panel .tab-list .suggestions')).toBeVisible()
+    await expect(page.locator('.checkout-panel .tab-list > h3')).toHaveText('Kaikki')
   })
 
   test('simple_tab_lists hides the index and recents, listing names alphabetically', async ({ page }) => {
@@ -21,6 +22,7 @@ test.describe('Simple tab lists', () => {
     await h.login(page)
     await h.startPurchase(page)
     await expect(page.locator('.checkout-panel .tab-list .alphabet-container')).toBeHidden()
+    await expect(page.locator('.checkout-panel .tab-list > h3')).toHaveText('Piikit')
     const tabs = page.locator('.checkout-panel .tab-list .tabs > div')
     await expect(tabs.first()).toBeVisible()
     const names = await tabs.allTextContents()
@@ -35,6 +37,7 @@ test.describe('Simple tab lists', () => {
     await page.locator('#session-info').click()
     await expect(page.locator('.session-panel')).toHaveClass(/active/)
     await expect(page.locator('#session-tab-list .alphabet-container')).toBeHidden()
+    await expect(page.locator('#session-tab-list > h3')).toHaveText('Piikit')
     await expect(page.locator('#session-tab-list .tabs > div', { hasText: h.TAB }).first()).toBeVisible()
   })
 })

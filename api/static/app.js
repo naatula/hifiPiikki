@@ -821,6 +821,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Plain alphabetical tab pickers: CSS hides the letter index and
         // "Viimeisimmät" suggestions (both checkout and session lists).
         document.body.classList.toggle('simple-tab-lists', !!appConfig.simple_tab_lists)
+        // The full-list heading ("Kaikki" next to "Viimeisimmät") is the only
+        // one left in simple mode, so it reads "Piikit" there instead.
+        document.querySelectorAll('.tab-list > h3').forEach((h) => {
+            h.textContent = appConfig.simple_tab_lists ? 'Piikit' : 'Kaikki'
+        })
     }
 
 
