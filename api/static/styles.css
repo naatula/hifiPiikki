@@ -204,6 +204,13 @@ body.custom-amount-only-mode .custom-only-header-buttons.button-group {
     display: flex;
 }
 
+/* Qualified so it outranks the mobile `.statistics-button` auto-width
+   override: this group stays a row, so the button must stay square. */
+.custom-only-header-buttons .statistics-button {
+    width: 3.5rem;
+    aspect-ratio: 1;
+}
+
 /* The checkout is the only view in this mode: show it without sliding in. */
 body.custom-amount-only-mode #app > * {
     transition: none;
