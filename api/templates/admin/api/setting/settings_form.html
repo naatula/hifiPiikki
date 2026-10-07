@@ -71,6 +71,15 @@
       {% if form.simple_tab_lists.help_text %}<div class="help">{{ form.simple_tab_lists.help_text }}</div>{% endif %}
     </div>
 
+    <div class="form-row{% if form.show_tab_balances.errors %} errors{% endif %}">
+      {{ form.show_tab_balances.errors }}
+      <div>
+        {{ form.show_tab_balances }}
+        <label for="{{ form.show_tab_balances.id_for_label }}" class="vCheckboxLabel">{{ form.show_tab_balances.label }}</label>
+      </div>
+      {% if form.show_tab_balances.help_text %}<div class="help">{{ form.show_tab_balances.help_text }}</div>{% endif %}
+    </div>
+
     <div class="form-row{% if form.pin_lockout_threshold.errors %} errors{% endif %}">
       {{ form.pin_lockout_threshold.errors }}
       <div>

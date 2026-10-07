@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // optional "Käteinen" (cash) checkout row and the "Oma summa" button.
     // custom_amount defaults on so an outage before the first config load keeps
     // the long-standing feature visible.
-    var appConfig = { cash_enabled: false, custom_amount_enabled: true, custom_amount_only_enabled: false, sessions_enabled: true, simple_tab_lists: false, negative_balance_limit: null, shelly_configured: false }
+    var appConfig = { cash_enabled: false, custom_amount_enabled: true, custom_amount_only_enabled: false, sessions_enabled: true, simple_tab_lists: false, show_tab_balances: false, negative_balance_limit: null, shelly_configured: false }
 
     const tabsById = {}
     var enteredPin = ''
@@ -147,6 +147,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!tabData) return
         const total = items.reduce((s, it) => s + parseFloat(it.total), 0)
         tabData.balance = (parseFloat(tabData.balance) - total).toFixed(2)
+        document.querySelectorAll(`.checkout-panel .tab-list div[data-id="${tabId}"] .tab-balance`)
+            .forEach(el => { el.textContent = currency(tabData.balance) })
     }
 
     // Clamp a quantity input to a decimal in 0–99.99 (0.01 precision).
@@ -911,7 +913,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const tabData = tabsById[id]
         const tabObj = {
             "id": id,
-            "name": element.textContent,
+            "name": tabData ? tabData.name : element.textContent,
             "pin_required": tabData ? !!tabData.pin_required : false,
             "pin_attempts": tabData ? (tabData.pin_attempts || 0) : 0,
             "pin_locked": tabData ? !!tabData.pin_locked : false
@@ -932,6 +934,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (!multiTabMode) {
             document.querySelectorAll('.checkout-panel .tab-list .tabs > div, .checkout-panel .tab-list .suggestions > div').forEach((x) => x.classList.remove('selected'))
+            // Tapping the selected name again deselects it.
+            if (checkoutTab !== null && checkoutTab.id === id) {
+                checkoutTab = null
+                updateConfirmation()
+                return
+            }
             element.classList.add('selected')
             checkoutTab = tabObj
             updateConfirmation()
@@ -1007,20 +1015,31 @@ document.addEventListener("DOMContentLoaded", async () => {
             element.addEventListener('click', () => selectTab(element))
         }
 
+        // Name stays the element's first text node (the alphabet index reads
+        // innerHTML[0]); the balance follows as a span when enabled.
+        const tabLabel = (element, x) => {
+            element.textContent = x.name
+            if (!appConfig.show_tab_balances) return
+            const balSpan = document.createElement('span')
+            balSpan.className = 'tab-balance'
+            balSpan.textContent = currency(x.balance)
+            element.appendChild(balSpan)
+        }
+
         const allTabs = appConfig.simple_tab_lists
             ? [...tabs].sort((a, b) => a.name.localeCompare(b.name, 'fi'))
             : tabs
         allTabs.forEach((x) => {
             const element = document.createElement('div')
             element.dataset.id = x.id
-            element.textContent = x.name
+            tabLabel(element, x)
             document.querySelector('.checkout-panel .tab-list .tabs').appendChild(element)
             bindTabClick(element, x)
         })
         tabs.sort((a, b) => new Date(b.last_purchase_at || b.updated_at) - new Date(a.last_purchase_at || a.updated_at)).slice(0, 6).forEach((x) => {
             const element = document.createElement('div')
             element.dataset.id = x.id
-            element.textContent = x.name
+            tabLabel(element, x)
             document.querySelector('.checkout-panel .tab-list .suggestions').appendChild(element)
             bindTabClick(element, x)
         })
@@ -1040,6 +1059,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             alphabetContainer.appendChild(element)
         })
         document.querySelector('#session-tab-list').innerHTML = document.querySelector('.checkout-panel .tab-list').innerHTML
+        // Balances are a checkout-only display.
+        document.querySelectorAll('#session-tab-list .tab-balance').forEach(el => el.remove())
         document.querySelectorAll('#session-tab-list .pin-disabled').forEach(el => el.classList.remove('pin-disabled'))
         // Host-only tabs can't purchase but can still host a session, so they
         // must not be grayed out or blocked in the session tab picker.

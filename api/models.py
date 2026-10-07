@@ -70,6 +70,15 @@ def get_simple_tab_lists():
     return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
 
 
+def get_show_tab_balances():
+    """Return True if checkout tab buttons should show each tab's current
+    balance. Defaults to False."""
+    setting = Setting.objects.filter(key='show_tab_balances').first()
+    if setting is None or setting.value is None:
+        return False
+    return str(setting.value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 def get_negative_balance_limit():
     """Return the minimum allowed balance as a Decimal, or None if
     unset/empty (which means no limit).  Accepts any number: negative

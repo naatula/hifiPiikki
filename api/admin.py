@@ -343,7 +343,7 @@ class PurchaseAdmin(MyModelAdmin):
 
 class SettingsForm(forms.Form):
     KNOWN_KEYS = [
-        'cash_enabled', 'custom_amount_enabled', 'custom_amount_only_enabled', 'sessions_enabled', 'simple_tab_lists', 'pin_lockout_threshold',
+        'cash_enabled', 'custom_amount_enabled', 'custom_amount_only_enabled', 'sessions_enabled', 'simple_tab_lists', 'show_tab_balances', 'pin_lockout_threshold',
         'negative_balance_limit',
         'shelly_cloud_server', 'shelly_cloud_key', 'shelly_cloud_device',
     ]
@@ -373,6 +373,11 @@ class SettingsForm(forms.Form):
         required=False,
         label='Yksinkertaiset nimilistat',
         help_text='Piilottaa piikkilistoista aakkoshakemiston ja "Viimeisimmät"-listan. Kaikki nimet näytetään aakkosjärjestyksessä.',
+    )
+    show_tab_balances = forms.BooleanField(
+        required=False,
+        label='Näytä saldot kassalla',
+        help_text='Näyttää kassanäkymän piikkipainikkeissa kunkin piikin nykyisen saldon.',
     )
     pin_lockout_threshold = forms.IntegerField(
         required=False,
@@ -432,6 +437,7 @@ class SettingAdmin(MyModelAdmin):
                 'sessions_enabled': str(settings_dict.get('sessions_enabled', 'true')).strip().lower() in SettingsForm.TRUTHY,
                 'custom_amount_only_enabled': str(settings_dict.get('custom_amount_only_enabled', '')).strip().lower() in SettingsForm.TRUTHY,
                 'simple_tab_lists': str(settings_dict.get('simple_tab_lists', '')).strip().lower() in SettingsForm.TRUTHY,
+                'show_tab_balances': str(settings_dict.get('show_tab_balances', '')).strip().lower() in SettingsForm.TRUTHY,
                 'pin_lockout_threshold': self._parse_optional_int(settings_dict.get('pin_lockout_threshold', '')),
                 'negative_balance_limit': self._parse_optional_decimal(settings_dict.get('negative_balance_limit', '')),
                 'shelly_cloud_server': settings_dict.get('shelly_cloud_server', ''),
@@ -455,6 +461,7 @@ class SettingAdmin(MyModelAdmin):
             'sessions_enabled': 'true' if cleaned_data['sessions_enabled'] else 'false',
             'custom_amount_only_enabled': 'true' if cleaned_data['custom_amount_only_enabled'] else 'false',
             'simple_tab_lists': 'true' if cleaned_data['simple_tab_lists'] else 'false',
+            'show_tab_balances': 'true' if cleaned_data['show_tab_balances'] else 'false',
             'pin_lockout_threshold': str(cleaned_data['pin_lockout_threshold']) if cleaned_data['pin_lockout_threshold'] is not None else '',
             'negative_balance_limit': str(cleaned_data['negative_balance_limit']) if cleaned_data['negative_balance_limit'] is not None else '',
             'shelly_cloud_server': cleaned_data.get('shelly_cloud_server') or '',
